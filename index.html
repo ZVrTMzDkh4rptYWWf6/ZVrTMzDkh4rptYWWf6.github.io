@@ -139,10 +139,11 @@
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.4.5"></div>
+    <div id="versionInfo" data-version="1.4.6"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
+            <li>v1.4.6:<br />- Added redo function (ctrl+y or ctrl+shift+z).</li><br />
             <li>v1.4.5:<br />- Improved bug with error handler.<br />- Significantly improved displaying of errors that are found with both Hostname and IP Validation.<br/>- Added enhanced undo function.</li><br />
             <li>v1.4.4:<br />- Added Changelog Display</li><br />
             <li>v1.4.3:<br />- Added version display and changelog</li><br />
@@ -204,6 +205,7 @@
 	let allow_blank_ip = true;
 	
 	let undoStack = [];
+	let redoStack = [];
 	let maxUndoStack = 100; // Maximum number of undos
 	
 	let addData = [];
@@ -686,28 +688,31 @@
   	}
 
   	// Add this function to handle all types of changes
-  	function recordChange(type, tableId, rowIndex, columnKey, oldValue, newValue) {
-  		undoStack.push({
-  			type,
-  			tableId,
-  			rowIndex,
-  			columnKey,
-  			oldValue,
-  			newValue
-  		});
-  		if (undoStack.length > maxUndoStack) {
-  			undoStack.shift();
-  		}
-  		logDebug('Change recorded:', {
-  			type,
-  			tableId,
-  			rowIndex,
-  			columnKey,
-  			oldValue,
-  			newValue
-  		});
-  		logDebug('Undo stack:', undoStack);
-  	}
+	function recordChange(type, tableId, rowIndex, columnKey, oldValue, newValue) {
+		undoStack.push({
+			type,
+			tableId,
+			rowIndex,
+			columnKey,
+			oldValue,
+			newValue
+		});
+		if (undoStack.length > maxUndoStack) {
+			undoStack.shift();
+		}
+		redoStack = []; // Clear redo stack when a new action is performed
+		logDebug('Change recorded:', {
+			type,
+			tableId,
+			rowIndex,
+			columnKey,
+			oldValue,
+			newValue
+		});
+		logDebug('Undo stack:', undoStack);
+		logDebug('Redo stack:', redoStack);
+	}
+
 
 
   	function removeRow(tableId, rowIndex) {
@@ -765,34 +770,65 @@
   		displayTable(tableId, data);
   	}
 
-  	function undo() {
-  		logDebug('Undo function called');
-  		if (undoStack.length > 0) {
-  			const lastChange = undoStack.pop();
-  			logDebug('Undoing last change:', lastChange);
-  			let data;
-  			if (lastChange.tableId === 'addTable') {
-  				data = addData;
-  			} else if (lastChange.tableId === 'removeTable') {
-  				data = removeData;
-  			} else if (lastChange.tableId === 'changeTable') {
-  				data = changeData;
-  			}
+	function undo() {
+		logDebug('Undo function called');
+		if (undoStack.length > 0) {
+			const lastChange = undoStack.pop();
+			redoStack.push(lastChange); // Push the undone action to the redo stack
+			logDebug('Undoing last change:', lastChange);
+			let data;
+			if (lastChange.tableId === 'addTable') {
+				data = addData;
+			} else if (lastChange.tableId === 'removeTable') {
+				data = removeData;
+			} else if (lastChange.tableId === 'changeTable') {
+				data = changeData;
+			}
 
-  			if (lastChange.type === 'delete') {
-  				logDebug('Undoing delete operation');
-  				data.splice(lastChange.rowIndex, 0, lastChange.oldValue);
-  			} else if (lastChange.type === 'edit') {
-  				logDebug('Undoing edit operation');
-  				data[lastChange.rowIndex][lastChange.columnKey] = lastChange.oldValue;
-  			}
+			if (lastChange.type === 'delete') {
+				logDebug('Undoing delete operation');
+				data.splice(lastChange.rowIndex, 0, lastChange.oldValue);
+			} else if (lastChange.type === 'edit') {
+				logDebug('Undoing edit operation');
+				data[lastChange.rowIndex][lastChange.columnKey] = lastChange.oldValue;
+			}
 
-  			displayTable(lastChange.tableId, data);
-  			logDebug('Undo completed, redisplayed table');
-  		} else {
-  			logDebug('Nothing to undo, stack is empty');
-  		}
-  	}
+			displayTable(lastChange.tableId, data);
+			logDebug('Undo completed, redisplayed table');
+		} else {
+			logDebug('Nothing to undo, stack is empty');
+		}
+	}
+
+	function redo() {
+		logDebug('Redo function called');
+		if (redoStack.length > 0) {
+			const lastUndoneChange = redoStack.pop();
+			undoStack.push(lastUndoneChange); // Push the redone action back to the undo stack
+			logDebug('Redoing last undone change:', lastUndoneChange);
+			let data;
+			if (lastUndoneChange.tableId === 'addTable') {
+				data = addData;
+			} else if (lastUndoneChange.tableId === 'removeTable') {
+				data = removeData;
+			} else if (lastUndoneChange.tableId === 'changeTable') {
+				data = changeData;
+			}
+
+			if (lastUndoneChange.type === 'delete') {
+				logDebug('Redoing delete operation');
+				data.splice(lastUndoneChange.rowIndex, 1);
+			} else if (lastUndoneChange.type === 'edit') {
+				logDebug('Redoing edit operation');
+				data[lastUndoneChange.rowIndex][lastUndoneChange.columnKey] = lastUndoneChange.newValue;
+			}
+
+			displayTable(lastUndoneChange.tableId, data);
+			logDebug('Redo completed, redisplayed table');
+		} else {
+			logDebug('Nothing to redo, stack is empty');
+		}
+	}
 
   	function createDropdown(cell, options, initialValue, onSelect) {
   		const dropdown = document.createElement('div');
@@ -1119,13 +1155,21 @@
   	// Initial check when the page loads
   	checkForUpdates();
 
-  	function handleGlobalKeydown(e) {
-  		if (e.ctrlKey && e.key === 'z') {
-  			e.preventDefault();
-  			logDebug('Ctrl+Z pressed, calling undo function');
-  			undo();
-  		}
-  	}
+	function handleGlobalKeydown(e) {
+		// Check for undo (Ctrl+Z)
+		if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
+			e.preventDefault();
+			logDebug('Ctrl+Z pressed, calling undo function');
+			undo();
+		}
+		// Check for redo (Ctrl+Shift+Z or Ctrl+Y)
+		else if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') || 
+				 (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'y')) {
+			e.preventDefault();
+			logDebug('Ctrl+Shift+Z or Ctrl+Y pressed, calling redo function');
+			redo();
+		}
+	}
 
   	// Initialize the checkbox state
   	document.addEventListener('DOMContentLoaded', function() {
