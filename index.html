@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MDAC Formatter</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        textarea { width: 100%; height: 200px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        .editable { background-color: #f0f0f0; }
+        .invalid-ip { background-color: #ffcccc; }
+        button { margin: 10px 0; }
+        #configPanel { margin-bottom: 20px; }
+        .dropdown { position: relative; display: inline-block; width: 100%; }
+        .dropdown-content { display: none; position: absolute; background-color: #f9f9f9; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 1; max-height: 200px; overflow-y: auto; }
+        .dropdown-content div { padding: 12px 16px; text-decoration: none; display: block; cursor: pointer; }
+        .dropdown-content div:hover, .dropdown-content div.selected { background-color: #f1f1f1; }
+        .public-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+        .see-all { font-size: 0.8em; color: #666; font-style: italic; background-color: #e9e9e9; }
+		.error-row { background-color: #ffeecc;	}
+		.trash-icon { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>MDAC Formatter</h1>
+    <div id="configPanel">
+        <label for="dtcModelFrom">DTC Model Change:</label>
+        <input type="text" id="dtcModelFrom" value="DTC2022Model">
+        <label for="dtcModelTo"> To:</label>
+        <input type="text" id="dtcModelTo" value="2022">
+        <br/>
+        <label for="ostypeGuess">Guess OS Type:</label>
+        <input type="checkbox" id="ostypeGuess">
+        <br />
+        <label for="igsservicetowerGuess">Guess IGS Service Tower:</label>
+        <input type="checkbox" id="igsservicetowerGuess">
+    </div>
+    <textarea id="inputData" placeholder="Paste your MDAC data here..."></textarea>
+    <button onclick="processData()">Process Data</button>
+    <h2 id="addHeading">Add Actions</h2>
+    <table id="addTable"></table>
+    <button onclick="downloadCSV('add')">Download Add CSV</button>
+    <hr />
+    <h2 id="removeHeading">Remove Actions</h2>
+    <table id="removeTable"></table>
+    <button onclick="downloadCSV('remove')">Download Remove CSV</button>
+    <hr />
+    <h2 id="changeHeading">Change Actions</h2>
+    <table id="changeTable"></table>
+    <button onclick="downloadCSV('change')">Download Change CSV</button>
+
+
+    <script>
+    let addData = [];
+    let removeData = [];
+    let changeData = [];
+
+	let addCount = 0;
+	let removeCount = 0;
+	let changeCount = 0;
+	let errorCount = 0;
+	
+    const requiredColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
+
+    const dropdownOptions = {
+        'lvs.igsservicetower': ['Citrix', 'Cloud', 'Database', 'Internal Systems', 'Linux', 'Messaging', 'Network', 'Network Voice', 'NOC', 'Server', 'Storage & Backup', 'Virtualization', 'Windows'],
+        'lvs.ostype': ['Network', 'Windows', 'Linux', 'VMware', 'Other', 'NTAP', 'Cisco ASA', 'FortiOS', 'iLO', 'NX-OS', 'Xen'],
+        'lvs.igdeviceclass': ['Citrix ADC', 'Linux Virtualized', 'Windows Virtualized', 'Virtual SQL Server', 'NOC Toolset', 'SOC Toolset', 'Virtual Active Directory', 'Virtual Exchange', 'Physical Host/Blade Chassis', 'Office Firewall', 'Router', 'Edge Switch', 'Core Switch', 'Wireless Controller', 'Wireless Access Point']
+    };
+
+	function processData() {
+		console.log("Processing data...");
+		const input = document.getElementById('inputData').value;
+		console.log("Raw input:", input);
+		const lines = input.trim().split('\n').filter(line => {
+			// Remove lines that are empty, contain only whitespace/tabs, or have very little content
+			const trimmedLine = line.trim();
+			return trimmedLine !== '' && !/^\s*$/.test(trimmedLine) && trimmedLine.split('\t').some(cell => cell.trim() !== '');
+		});
+		console.log("Filtered lines:", lines);
+
+		if (lines.length === 0) {
+			console.log("No data to process");
+			return;
+		}
+
+		let headers = ['client', 'action', 'hostname', 'ip address', 'function', 'support hours', 'location', 'managed service level', 'support level', 'confidentiality class', 'platform', 'warranty expiry date', 'dtc model', 'igs device class', 'igs service tower', 'os type', 'igs backup', 'active defence', 'backup action', 'patching', 'pci role', 'pci purpose', 'notes'];
+		let dataLines = lines;
+
+		// Check if the first non-empty line contains headers
+		if (lines[0].toLowerCase().includes('client') || lines[0].toLowerCase().includes('hostname')) {
+			headers = lines[0].toLowerCase().split('\t').map(h => h.trim());
+			dataLines = lines.slice(1);
+		}
+		console.log("Headers:", headers);
+		console.log("Data lines:", dataLines);
+
+		const dtcModelFrom = document.getElementById('dtcModelFrom').value;
+		const dtcModelTo = document.getElementById('dtcModelTo').value;
+		const ostypeGuess = document.getElementById('ostypeGuess').checked;
+		const igsservicetowerGuess = document.getElementById('igsservicetowerGuess').checked;
+
+		addData = [];
+		removeData = [];
+		changeData = [];
+
+		// Reset counters
+		addCount = 0;
+		removeCount = 0;
+		changeCount = 0;
+		errorCount = 0;
+
+		dataLines.forEach((line, index) => {
+			console.log(`Processing line ${index + 1}:`, line);
+			const values = line.split('\t');
+			console.log("Values:", values);
+			
+			// Skip lines that don't have enough non-empty values
+			if (values.filter(v => v.trim() !== '').length < 3) {
+				console.log("Skipping line with insufficient data");
+				return;
+			}
+
+			const actionIndex = findColumnIndex(headers, ['action']);
+			console.log("Action index:", actionIndex);
+			const action = actionIndex !== -1 && values[actionIndex] ? values[actionIndex].toLowerCase().trim() : 'add';
+			console.log("Action:", action);
+
+			if (action !== 'add' && action !== 'remove' && action !== 'change') {
+				console.log("Skipping non-add/remove/change action");
+				return;
+			}
+
+			const row = {};
+			requiredColumns.forEach(col => row[col] = '');
+
+			row['public_Name'] = (values[findColumnIndex(headers, ['hostname'])] || '').toUpperCase();
+			row['lvs.hostname'] = values[findColumnIndex(headers, ['ip address', 'ipaddress', 'ip'])] || '';
+			row['lvs.assetfunction'] = values[findColumnIndex(headers, ['function'])] || '';
+			row['lvs.supporthours'] = values[findColumnIndex(headers, ['support hours', 'supporthours'])] || '';
+			row['lvs.assetlocation'] = values[findColumnIndex(headers, ['location'])] || '';
+			row['lvs.managedservicelevel'] = values[findColumnIndex(headers, ['managed service level', 'managedservicelevel'])] || '';
+			row['lvs.supportlevel'] = values[findColumnIndex(headers, ['support level', 'supportlevel'])] || '';
+			row['lvs.confidentialityclass'] = values[findColumnIndex(headers, ['confidentiality class', 'confidentialityclass'])] || '';
+			row['lvs.deviceplatform'] = values[findColumnIndex(headers, ['platform'])] || '';
+			row['lvs.igdeviceclass'] = values[findColumnIndex(headers, ['igs device class', 'igsdeviceclass'])] || '';
+			row['lvs.igsservicetower'] = values[findColumnIndex(headers, ['igs service tower', 'igsservicetower'])] || '';
+			row['lvs.ostype'] = values[findColumnIndex(headers, ['os type', 'ostype'])] || '';
+			row['lvs.igsbackup'] = values[findColumnIndex(headers, ['igs backup', 'igsbackup'])] || '';
+			row['lvs.patching'] = values[findColumnIndex(headers, ['patching'])] || '';
+			let dtcModelIndex = findColumnIndex(headers, ['dtc model', 'dtcmodel']);
+			row['lvs.dtcmodel'] = dtcModelIndex !== -1 && values[dtcModelIndex]?.includes(dtcModelFrom) ? dtcModelTo : '';
+			row['lvs.nocdeviceclass'] = values[findColumnIndex(headers, ['managed service level', 'managedservicelevel'])] || '';
+
+			// Guess OS type and IGS Service Tower only for add and change actions
+			if (action === 'add' || action === 'change') {
+				// Guess OS type based on other fields
+				if (ostypeGuess && !row['lvs.ostype']) {
+					row['lvs.ostype'] = guessOSType(row);
+				}
+
+				// Guess IGS Service Tower based on other fields
+				if (igsservicetowerGuess && !row['lvs.igsservicetower']) {
+					row['lvs.igsservicetower'] = guessIGSServiceTower(row);
+				}
+			}
+
+			console.log("Processed row:", row);
+			if (Object.values(row).some(value => value !== '')) {
+				if (action === 'add') {
+					addData.push(row);
+					addCount++;
+				} else if (action === 'remove') {
+					removeData.push(row);
+					removeCount++;
+				} else if (action === 'change') {
+					changeData.push(row);
+					changeCount++;
+				}
+			}
+			
+			if (!row['lvs.hostname'] || !row['lvs.assetfunction']) {
+				row.isError = true;
+				errorCount++;
+			}
+			
+		});
+
+		console.log("Add data:", addData);
+		console.log("Remove data:", removeData);
+		console.log("Change data:", changeData);
+
+		// Update the headings with the counts
+		document.getElementById('addHeading').textContent = `Add Actions (${addCount}) ${errorCount > 0 ? `| ${errorCount} error${errorCount > 1 ? 's' : ''}` : ''}`;
+		document.getElementById('removeHeading').textContent = `Remove Actions (${removeCount})`;
+		document.getElementById('changeHeading').textContent = `Change Actions (${changeCount})`;
+
+		displayTable('addTable', addData);
+		displayTable('removeTable', removeData);
+		displayTable('changeTable', changeData);
+	}
+
+    function findColumnIndex(headers, columnNames) {
+        console.log("Finding column index for:", columnNames);
+        console.log("Headers:", headers);
+        for (let name of columnNames) {
+            let index = headers.findIndex(h => h.includes(name));
+            console.log(`Checking '${name}', index:`, index);
+            if (index !== -1) return index;
+        }
+        console.log("Column not found");
+        return -1;
+    }
+
+    function isValidIP(ip) {
+        const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (!ipPattern.test(ip)) return false;
+        const parts = ip.split('.');
+        return parts.every(part => parseInt(part) >= 0 && parseInt(part) <= 255);
+    }
+
+	function displayTable(tableId, data) {
+		const table = document.getElementById(tableId);
+		table.innerHTML = '';
+		
+		// Create header
+		const headerRow = table.insertRow();
+		headerRow.className = 'header-row';
+		
+		// Add a column for the trash icon
+		const trashHeader = document.createElement('th');
+		trashHeader.textContent = '';
+		headerRow.appendChild(trashHeader);
+
+		requiredColumns.forEach(key => {
+			const th = document.createElement('th');
+			th.textContent = key;
+			headerRow.appendChild(th);
+		});
+
+		// Create data rows
+		data.forEach((row, rowIndex) => {
+			if (Object.values(row).some(value => value !== '')) {
+				const tr = table.insertRow();
+				if (row.isError) {
+					tr.classList.add('error-row');
+				}
+
+				// Add trash icon cell
+				const trashCell = tr.insertCell();
+				if (row.isError) {
+					const trashIcon = document.createElement('span');
+					trashIcon.innerHTML = '🗑️';
+					trashIcon.className = 'trash-icon';
+					trashIcon.onclick = () => removeRow(tableId, rowIndex);
+					trashCell.appendChild(trashIcon);
+				}
+
+				requiredColumns.forEach((key, colIndex) => {
+                    const td = tr.insertCell();
+                    if (tableId === 'addTable' && key in dropdownOptions) {
+                        createDropdown(td, dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
+                    } else {
+                        td.textContent = row[key];
+                        td.contentEditable = true;
+                        td.className = 'editable';
+                        if (key === 'public_Name') {
+                            td.classList.add('public-name');
+                        }
+                        if (key === 'lvs.hostname' && !isValidIP(row[key])) {
+                            td.classList.add('invalid-ip');
+                        }
+                        td.dataset.row = rowIndex;
+                        td.dataset.col = colIndex;
+                        td.addEventListener('keydown', handleCellKeyDown);
+                        td.addEventListener('blur', (event) => {
+                            const newValue = event.target.textContent;
+                            updateData(tableId, rowIndex, key, newValue);
+                            if (key === 'lvs.hostname') {
+                                event.target.classList.toggle('invalid-ip', !isValidIP(newValue));
+                            }
+                        });
+                        // Add focus event listener to move cursor to end
+                        td.addEventListener('focus', function() {
+                            const range = document.createRange();
+                            const sel = window.getSelection();
+                            range.selectNodeContents(this);
+                            range.collapse(false); // false means collapse to end
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+	function removeRow(tableId, rowIndex) {
+		let data;
+		if (tableId === 'addTable') {
+			data = addData;
+			addCount--;
+		} else if (tableId === 'removeTable') {
+			data = removeData;
+			removeCount--;
+		} else if (tableId === 'changeTable') {
+			data = changeData;
+			changeCount--;
+		}
+
+		if (data[rowIndex].isError) {
+			errorCount--;
+		}
+
+		data.splice(rowIndex, 1);
+		displayTable(tableId, data);
+
+		// Update the headings with the new counts
+		document.getElementById('addHeading').textContent = `Add Actions (${addCount}) ${errorCount > 0 ? `| ${errorCount} error${errorCount > 1 ? 's' : ''}` : ''}`;
+		document.getElementById('removeHeading').textContent = `Remove Actions (${removeCount})`;
+		document.getElementById('changeHeading').textContent = `Change Actions (${changeCount})`;
+	}
+
+    function createDropdown(cell, options, initialValue, onSelect) {
+        const dropdown = document.createElement('div');
+        dropdown.className = 'dropdown';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = initialValue;
+        input.style.width = '100%';
+        const dropdownContent = document.createElement('div');
+        dropdownContent.className = 'dropdown-content';
+
+        dropdown.appendChild(input);
+        dropdown.appendChild(dropdownContent);
+        cell.appendChild(dropdown);
+
+        let selectedIndex = -1;
+        let isDropdownVisible = false;
+
+        function showDropdown() {
+            dropdownContent.style.display = 'block';
+            isDropdownVisible = true;
+            updateDropdownOptions(input.value);
+        }
+
+        function hideDropdown() {
+            dropdownContent.style.display = 'none';
+            isDropdownVisible = false;
+        }
+
+        input.addEventListener('focus', showDropdown);
+
+        input.addEventListener('blur', () => {
+            setTimeout(hideDropdown, 200);
+        });
+
+        input.addEventListener('input', () => {
+            showDropdown();
+            updateDropdownOptions(input.value);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            const items = dropdownContent.querySelectorAll('div:not(.see-all)');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (isDropdownVisible) {
+                    selectedIndex = (selectedIndex + 1) % items.length;
+                    updateSelection();
+                } else {
+                    navigateToNextRow(cell);
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (isDropdownVisible) {
+                    selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                    updateSelection();
+                } else {
+                    navigateToPreviousRow(cell);
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (isDropdownVisible && selectedIndex !== -1 && items[selectedIndex]) {
+                    const selectedOption = items[selectedIndex].textContent;
+                    input.value = selectedOption;
+                    onSelect(selectedOption);
+                    hideDropdown();
+                } else if (e.shiftKey) {
+                    navigateToPreviousRow(cell);
+                } else {
+                    navigateToNextRow(cell);
+                }
+            } else if (e.key === 'Tab') {
+                hideDropdown();
+            } else if (e.key === 'Backspace' && input.value === '') {
+                showDropdown();
+            }
+        });
+
+        function updateSelection() {
+            const items = dropdownContent.querySelectorAll('div:not(.see-all)');
+            items.forEach((item, index) => {
+                if (index === selectedIndex) {
+                    item.classList.add('selected');
+                    item.scrollIntoView({ block: 'nearest' });
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        }
+
+        function updateDropdownOptions(filter) {
+            dropdownContent.innerHTML = '';
+            selectedIndex = -1;
+            
+            // Add "See All" option
+            const seeAllOption = document.createElement('div');
+            seeAllOption.textContent = 'Click to See All Options';
+            seeAllOption.className = 'see-all';
+            seeAllOption.addEventListener('mousedown', (e) => {
+                e.preventDefault(); // Prevent input blur
+                updateDropdownOptions('');
+                input.focus();
+            });
+            dropdownContent.appendChild(seeAllOption);
+
+            const filteredOptions = filter 
+                ? options.filter(option => option.toLowerCase().includes(filter.toLowerCase()))
+                : options;
+
+            filteredOptions.forEach(option => {
+                const div = document.createElement('div');
+                div.textContent = option;
+                div.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // Prevent input blur
+                    input.value = option;
+                    onSelect(option);
+                    hideDropdown();
+                });
+                dropdownContent.appendChild(div);
+            });
+
+            // Update "See All" option text if filtered
+            if (filter && filteredOptions.length < options.length) {
+                seeAllOption.textContent = 'Narrowed Selection - Click to See All';
+            }
+        }
+
+        function navigateToNextRow(currentCell) {
+            const currentRow = currentCell.parentElement;
+            const nextRow = currentRow.nextElementSibling;
+            if (nextRow) {
+                const nextCell = nextRow.cells[currentCell.cellIndex];
+                if (nextCell) {
+                    const nextInput = nextCell.querySelector('input') || nextCell;
+                    nextInput.focus();
+                }
+            }
+        }
+
+        function navigateToPreviousRow(currentCell) {
+            const currentRow = currentCell.parentElement;
+            const previousRow = currentRow.previousElementSibling;
+            if (previousRow && !previousRow.classList.contains('header-row')) {
+                const previousCell = previousRow.cells[currentCell.cellIndex];
+                if (previousCell) {
+                    const previousInput = previousCell.querySelector('input') || previousCell;
+                    previousInput.focus();
+                }
+            }
+        }
+    }
+
+    function handleCellKeyDown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const currentRow = parseInt(event.target.dataset.row);
+            const currentCol = parseInt(event.target.dataset.col);
+            const table = event.target.closest('table');
+            const nextRow = table.rows[currentRow + 2]; // +2 because of the header row
+            if (nextRow) {
+                const nextCell = nextRow.cells[currentCol];
+                if (nextCell) {
+                    nextCell.focus();
+                }
+            }
+        }
+    }
+
+    function updateData(tableId, rowIndex, key, value) {
+        const data = tableId === 'addTable' ? addData : removeData;
+        data[rowIndex][key] = value;
+    }
+
+    function downloadCSV(action) {
+        let data;
+        if (action === 'add') {
+            data = addData;
+        } else if (action === 'remove') {
+            data = removeData;
+        } else if (action === 'change') {
+            data = changeData;
+        } else {
+            console.error('Invalid action for CSV download');
+            return;
+        }
+
+        const csv = [
+            requiredColumns.join(','),
+            ...data.map(row => requiredColumns.map(key => row[key]).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            //link.setAttribute("download", `${action}_data.csv`);
+            link.setAttribute("download", `raw_data_new.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+	function guessOSType(row) {
+		const deviceClass = row['lvs.igdeviceclass'].toLowerCase();
+		const assetFunction = row['lvs.assetfunction'].toLowerCase();
+		const publicName = row['public_Name'].toLowerCase();
+
+		if (deviceClass.includes('windows') || assetFunction.includes('windows')) {
+			return 'Windows';
+		} else if (deviceClass.includes('linux') || assetFunction.includes('linux')) {
+			return 'Linux';
+		} else if (deviceClass.includes('vmware') || assetFunction.includes('vmware') || assetFunction.includes('esxi')) {
+			return 'VMware';
+		} else if (deviceClass.includes('citrix') || assetFunction.includes('citrix')) {
+			return 'Windows'; // Assuming Citrix runs on Windows
+		} else if (deviceClass.includes('router') || deviceClass.includes('switch') || deviceClass.includes('firewall')) {
+			return 'Network';
+		} else if (deviceClass.includes('san') || deviceClass.includes('nas') || assetFunction.includes('storage')) {
+			return 'Other'; // Storage devices often have proprietary OS
+		} else if (publicName.startsWith('esx') || publicName.includes('vcenter')) {
+			return 'VMware';
+		} else if (assetFunction.includes('domain controller') || assetFunction.includes('active directory')) {
+			return 'Windows';
+		} else if (assetFunction.includes('sql server')) {
+			return 'Windows'; // Assuming SQL Server runs on Windows
+		}
+
+		return ''; // If we can't make a confident guess, return an empty string
+	}
+
+	function guessIGSServiceTower(row) {
+		const deviceClass = row['lvs.igdeviceclass'].toLowerCase();
+		const assetFunction = row['lvs.assetfunction'].toLowerCase();
+		const osType = row['lvs.ostype'].toLowerCase();
+
+		/*
+		// Old Classification
+		if (deviceClass.includes('citrix') || assetFunction.includes('citrix')) {
+			return 'Citrix';
+		} else if (deviceClass.includes('sql') || assetFunction.includes('database')) {
+			return 'Database';
+		} else if (assetFunction.includes('exchange') || assetFunction.includes('mail')) {
+			return 'Messaging';
+		} else if (deviceClass.includes('router') || deviceClass.includes('switch') || deviceClass.includes('firewall')) {
+			return 'Network';
+		} else if (assetFunction.includes('voice') || assetFunction.includes('voip')) {
+			return 'Network Voice';
+		} else if (deviceClass.includes('san') || deviceClass.includes('nas') || assetFunction.includes('storage') || assetFunction.includes('backup')) {
+			return 'Storage & Backup';
+		} else if (deviceClass.includes('vmware') || assetFunction.includes('vmware') || assetFunction.includes('esxi') || assetFunction.includes('hypervisor')) {
+			return 'Virtualization';
+		} else if (osType === 'windows' || deviceClass.includes('windows')) {
+			return 'Windows';
+		} else if (osType === 'linux' || deviceClass.includes('linux')) {
+			return 'Linux';
+		} else if (deviceClass.includes('noc') || assetFunction.includes('monitoring')) {
+			return 'NOC';
+		} else if (assetFunction.includes('domain controller') || assetFunction.includes('active directory') || assetFunction.includes('file server')) {
+			return 'Internal Systems';
+		}
+		*/
+		
+		if (deviceClass.includes('citrix') || assetFunction.includes('citrix')) {
+			return 'Citrix';
+		} else if (deviceClass.includes('router') || deviceClass.includes('switch') || deviceClass.includes('firewall')) {
+			return 'Network';
+		} else if (assetFunction.includes('voice') || assetFunction.includes('voip') || assetFunction.includes('cce') || assetFunction.includes('call routing') || assetFunction.includes('cisco communications')) {
+			return 'Network Voice';
+		} else if (deviceClass.includes('sql') || assetFunction.includes('database')) {
+			return 'Database';
+		} else if (assetFunction.includes('exchange') || assetFunction.includes('mail')) {
+			return 'Messaging';
+		} else if (assetFunction.includes('cloud') || deviceClass.includes('cloud')) {
+			return 'Cloud';
+		} else if (deviceClass.includes('san') || deviceClass.includes('nas') || assetFunction.includes('storage') || assetFunction.includes('backup')) {
+			return 'Storage & Backup';
+		} else if (deviceClass.includes('noc') || assetFunction.includes('monitoring')) {
+			return 'NOC';
+		} else if (osType === 'windows' || osType === 'linux' || osType.includes('unix') || 
+				   deviceClass.includes('windows') || deviceClass.includes('linux') || deviceClass.includes('unix') ||
+				   deviceClass.includes('vmware') || assetFunction.includes('vmware') || assetFunction.includes('esxi') ||
+				   assetFunction.includes('hypervisor') || assetFunction.includes('server')) {
+			return 'Server';
+		}
+		
+		return ''; // If we can't make a confident guess, return an empty string
+	}
+    </script>
+</body>
+</html>
