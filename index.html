@@ -12,10 +12,6 @@
         .editable { background-color: #f0f0f0; }
         button { margin: 10px 0; }
         #configPanel { margin-bottom: 20px; }
-        .dropdown { position: relative; display: inline-block; width: 100%; }
-        .dropdown-content { display: none; position: absolute; background-color: #f9f9f9; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 1; max-height: 200px; overflow-y: auto; }
-        .dropdown-content div { padding: 12px 16px; text-decoration: none; display: block; cursor: pointer; }
-        .dropdown-content div:hover, .dropdown-content div.selected { background-color: #f1f1f1; }
         .public-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
         .see-all { font-size: 0.8em; color: #666; font-style: italic; background-color: #e9e9e9; }
 		.trash-icon {
@@ -132,14 +128,83 @@
             border-radius: 5px;
             text-align: center;
         }
+		.table-container {
+			max-height: 700px;
+			overflow-y: auto;
+			position: relative; /* Add this */
+		}
+
+		.table-container table {
+			width: 100%;
+			border-collapse: separate;
+			border-spacing: 0;
+		}
+
+		.sticky-header th {
+			position: sticky;
+			top: 0;
+			background-color: #f8f8f8;
+			z-index: 2; /* Reduced from 500 */
+			box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+		}
+
+		.table-container {
+			position: relative;
+			z-index: 1;
+		}
+
+		.dropdown {
+			position: static;
+			display: inline-block;
+			width: 100%;
+		}
+
+		.dropdown-content {
+			display: none;
+			position: absolute;
+			background-color: #f9f9f9;
+			min-width: 200px;
+			width: max-content;
+			box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+			max-height: 200px;
+			overflow-y: auto;
+			z-index: 9999;
+		}
+
+		.dropdown-content.visible {
+			display: block !important;
+		}
+
+		.dropdown-content div {
+			padding: 12px 16px;
+			text-decoration: none;
+			display: block;
+			cursor: pointer;
+			white-space: nowrap;
+		}
+
+		.dropdown-content div:hover,
+		.dropdown-content div.selected {
+			background-color: #f1f1f1;
+		}
+
+
+		th, td {
+			padding: 8px;
+			border: 1px solid #ddd;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
     </style>
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.4.7"></div>
+    <div id="versionInfo" data-version="1.4.8"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
+            <li>v1.4.8:<br />- Added sticky header on each table so you can identify what columns are what.</li><br />
             <li>v1.4.7:<br />- Added safety feature to prevent data loss when you make changes to a table and haven't downloaded the csv yet.</li><br />
             <li>v1.4.6:<br />- Added redo function (ctrl+y or ctrl+shift+z).</li><br />
             <li>v1.4.5:<br />- Improved bug with error handler.<br />- Significantly improved displaying of errors that are found with both Hostname and IP Validation.<br/>- Added enhanced undo function.</li><br />
@@ -179,19 +244,31 @@
 	
     <h2 id="addHeading">Add Actions</h2>
     <div id="addErrorSection" class="error-section" style="display: none;"></div>
-    <table id="addTable"></table>
+	<div class="table-container">
+		<table id="addTable">
+		    <!-- Table content -->
+		</table>
+	</div>
     <button id="addDownloadButton" onclick="downloadCSV('add')">Download Add CSV</button>
 	
     <hr />
     <h2 id="removeHeading">Remove Actions</h2>
     <div id="removeErrorSection" class="error-section" style="display: none;"></div>
-    <table id="removeTable"></table>
+	<div class="table-container">
+		<table id="removeTable">
+		    <!-- Table content -->
+		</table>
+	</div>
     <button id="removeDownloadButton" onclick="downloadCSV('remove')">Download Remove CSV</button>
 	
     <hr />
     <h2 id="changeHeading">Change Actions</h2>
     <div id="changeErrorSection" class="error-section" style="display: none;"></div>
-    <table id="changeTable"></table>
+	<div class="table-container">
+		<table id="changeTable">
+		    <!-- Table content -->
+		</table>
+	</div>
     <button id="changeDownloadButton" onclick="downloadCSV('change')">Download Change CSV</button>
 
 
@@ -288,27 +365,27 @@
 			change: false
 		};
 
-  		clearOldData();
+		clearOldData();
 
-  		logDebug("Processing data...");
+		logDebug("Processing data...");
 
-  		showProcessingOverlay('Preparing to process data...');
+		showProcessingOverlay('Preparing to process data...');
 
   		allow_blank_ip = document.getElementById('allowBlankIP').checked;
 
-  		const input = document.getElementById('inputData').value;
-  		const lines = input.trim().split('\n').filter(line => {
-  			const trimmedLine = line.trim();
-  			return trimmedLine !== '' && !/^\s*$/.test(trimmedLine) && trimmedLine.split('\t').some(cell => cell.trim() !== '');
-  		});
+		const input = document.getElementById('inputData').value;
+		const lines = input.trim().split('\n').filter(line => {
+			const trimmedLine = line.trim();
+			return trimmedLine !== '' && !/^\s*$/.test(trimmedLine) && trimmedLine.split('\t').some(cell => cell.trim() !== '');
+		});
 
-  		if (lines.length === 0) {
-  			logDebug("No data to process");
-  			hideProcessingOverlay();
-  			return;
-  		}
+		if (lines.length === 0) {
+			logDebug("No data to process");
+			hideProcessingOverlay();
+			return;
+		}
 
-  		showProcessingOverlay(`Processing ${lines.length} lines of data...`);
+		showProcessingOverlay(`Processing ${lines.length} lines of data...`);
 
   		let headers = ['client', 'action', 'hostname', 'ip address', 'function', 'support hours', 'location', 'managed service level', 'support level', 'confidentiality class', 'platform', 'warranty expiry date', 'dtc model', 'igs device class', 'igs service tower', 'os type', 'igs backup', 'active defence', 'backup action', 'patching', 'pci role', 'pci purpose', 'notes'];
   		let dataLines = lines;
@@ -422,18 +499,30 @@
   		document.getElementById('removeHeading').textContent = `Remove Actions (${removeCount})`;
   		document.getElementById('changeHeading').textContent = `Change Actions (${changeCount})`;
 
-  		setTimeout(() => {
-  			displayTable('addTable', addData);
-  			displayTable('removeTable', removeData);
-  			displayTable('changeTable', changeData);
-        
+		Promise.all([
+			new Promise(resolve => {
+				displayTable('addTable', addData);
+				resolve();
+			}),
+			new Promise(resolve => {
+				displayTable('removeTable', removeData);
+				resolve();
+			}),
+			new Promise(resolve => {
+				displayTable('changeTable', changeData);
+				resolve();
+			})
+		]).then(() => {
 			// Update all download buttons
 			updateDownloadButton('add');
 			updateDownloadButton('remove');
 			updateDownloadButton('change');
 			
+			// Hide the processing overlay after all operations are complete
 			hideProcessingOverlay();
-  		}, 0);
+			
+			logDebug('All tables displayed and buttons updated');
+		});
 
   	}
 
@@ -551,31 +640,34 @@
 
   	function displayTable(tableId, data) {
   		logDebug('Displaying table:', tableId);
-  		const table = document.getElementById(tableId);
-  		table.innerHTML = '';
+		const table = document.getElementById(tableId);
+		table.innerHTML = '';
 
-  		let tableErrorCount = 0;
+		let tableErrorCount = 0;
 
-  		// Create header row
-  		const headerRow = table.insertRow();
-  		headerRow.className = 'header-row';
+		// Create header row
+		const headerRow = table.createTHead().insertRow();
+		headerRow.className = 'sticky-header';
 
   		// Add columns for line number, trash icon, and status
-  		['#', '', 'Status', ...requiredColumns].forEach(header => {
-  			const th = document.createElement('th');
-  			th.textContent = header;
-  			headerRow.appendChild(th);
-  		});
+		['#', '', 'Status', ...requiredColumns].forEach(header => {
+			const th = document.createElement('th');
+			th.textContent = header;
+			headerRow.appendChild(th);
+		});
 
+		// Create table body
+		const tbody = table.createTBody();
+	
   		// Create data rows
   		data.forEach((row, rowIndex) => {
-  			const tr = table.insertRow();
-  			tr.id = `${tableId}-row-${rowIndex}`;
+			const tr = tbody.insertRow();
+			tr.id = `${tableId}-row-${rowIndex}`;
 
-  			// Add line number cell
-  			const lineNumberCell = tr.insertCell();
-  			lineNumberCell.textContent = rowIndex + 1;
-  			lineNumberCell.className = 'line-number';
+			// Add line number cell
+			const lineNumberCell = tr.insertCell();
+			lineNumberCell.textContent = rowIndex + 1;
+			lineNumberCell.className = 'line-number';
 
   			// Determine if this row has errors
   			const isIPValid = isValidIP(row['lvs.hostname']);
@@ -597,21 +689,21 @@
   			}
 
   			// Add trash icon cell
-  			const trashCell = tr.insertCell();
-  			if (row.isError) {
-  				const trashIcon = document.createElement('span');
-  				trashIcon.innerHTML = '🗑️';
-  				trashIcon.className = 'trash-icon';
-  				trashIcon.onclick = () => removeRow(tableId, rowIndex);
-  				trashCell.appendChild(trashIcon);
-  			}
+			const trashCell = tr.insertCell();
+			if (row.isError) {
+				const trashIcon = document.createElement('span');
+				trashIcon.innerHTML = '🗑️';
+				trashIcon.className = 'trash-icon';
+				trashIcon.onclick = () => removeRow(tableId, rowIndex);
+				trashCell.appendChild(trashIcon);
+			}
 
   			// Add status cell
-  			const statusCell = tr.insertCell();
-  			const statusBadge = document.createElement('span');
-  			statusBadge.className = `status-badge ${row.isError ? 'status-error' : 'status-valid'}`;
-  			statusBadge.textContent = row.isError ? 'Error' : 'Valid';
-  			statusCell.appendChild(statusBadge);
+			const statusCell = tr.insertCell();
+			const statusBadge = document.createElement('span');
+			statusBadge.className = `status-badge ${row.isError ? 'status-error' : 'status-valid'}`;
+			statusBadge.textContent = row.isError ? 'Error' : 'Valid';
+			statusCell.appendChild(statusBadge);
 
   			// Add data cells
   			requiredColumns.forEach((key, colIndex) => {
@@ -675,6 +767,8 @@
   			});
   		});
 
+		table.appendChild(tbody);
+		
   		// Update error section
   		updateErrorSection(tableId, data, tableErrorCount);
 
@@ -691,62 +785,117 @@
   		logDebug('Table display completed');
   	}
 
-  	function createErrorSection(tableId, data) {
-  		const errorSection = document.createElement('div');
-  		errorSection.className = 'error-section';
-  		errorSection.style.display = 'none';
+	function setupStickyHeaders() {
+		const tables = document.querySelectorAll('.table-container table');
+		tables.forEach(table => {
+			const header = table.querySelector('.sticky-header');
+			const tableContainer = table.closest('.table-container');
+			const headerHeight = header.offsetHeight;
 
-  		const errorTitle = document.createElement('h3');
-  		errorTitle.textContent = 'Errors Detected';
-  		errorSection.appendChild(errorTitle);
+			let ticking = false;
+			tableContainer.addEventListener('scroll', () => {
+				if (!ticking) {
+					window.requestAnimationFrame(() => {
+						header.style.transform = `translateY(${tableContainer.scrollTop}px)`;
+						ticking = false;
+					});
+					ticking = true;
+				}
+			});
 
-  		const errorList = document.createElement('div');
-  		data.forEach((row, index) => {
-  			if (row.isError) {
-  				const errorLink = document.createElement('a');
-  				errorLink.href = `#${tableId}-row-${index}`;
-  				errorLink.className = 'error-link';
-  				const errorMessage = `Error in Row ${index + 1}: ${row.public_Name || 'Unknown'} (${row.errorReasons.join(', ')})`;
-  				errorLink.textContent = errorMessage;
-  				errorList.appendChild(errorLink);
-  			}
-  		});
-  		errorSection.appendChild(errorList);
+			// Adjust the body margin to account for the header
+			const tableBody = table.querySelector('.table-body');
+			tableBody.style.marginTop = `${headerHeight}px`;
+		});
+	}
 
-  		const table = document.getElementById(tableId);
-  		table.parentNode.insertBefore(errorSection, table);
+	function createErrorSection(tableId, data) {
+		const errorSection = document.createElement('div');
+		errorSection.className = 'error-section';
+		errorSection.style.display = 'none';
 
-  		// Show error section if there are errors
-  		if (errorList.children.length > 0) {
-  			errorSection.style.display = 'block';
-  		}
-  	}
+		const errorTitle = document.createElement('h3');
+		errorTitle.textContent = 'Errors Detected';
+		errorSection.appendChild(errorTitle);
 
-  	function updateErrorSection(tableId, data, errorCount) {
-  		const errorSection = document.getElementById(`${tableId.replace('Table', 'ErrorSection')}`);
-  		errorSection.innerHTML = '';
+		const errorList = document.createElement('div');
+		data.forEach((row, index) => {
+			if (row.isError) {
+				const errorLink = document.createElement('a');
+				errorLink.href = 'javascript:void(0);';
+				errorLink.className = 'error-link';
+				const errorMessage = `Error in Row ${index + 1}: ${row.public_Name || 'Unknown'} (${row.errorReasons.join(', ')})`;
+				errorLink.textContent = errorMessage;
+				errorLink.addEventListener('click', () => scrollToRow(tableId, index));
+				errorList.appendChild(errorLink);
+			}
+		});
+		errorSection.appendChild(errorList);
 
-  		if (errorCount > 0) {
-  			const errorTitle = document.createElement('h3');
-  			errorTitle.textContent = 'Errors Detected';
-  			errorSection.appendChild(errorTitle);
+		const table = document.getElementById(tableId);
+		table.parentNode.insertBefore(errorSection, table);
 
-  			const errorList = document.createElement('div');
-  			data.forEach((row, index) => {
-  				if (row.isError) {
-  					const errorLink = document.createElement('a');
-  					errorLink.href = `#${tableId}-row-${index}`;
-  					errorLink.className = 'error-link';
-  					errorLink.textContent = `Error in Row ${index + 1}: ${row.public_Name || 'Unknown'} (${row.errorReasons.join(', ')})`;
-  					errorList.appendChild(errorLink);
-  				}
-  			});
-  			errorSection.appendChild(errorList);
-  			errorSection.style.display = 'block';
-  		} else {
-  			errorSection.style.display = 'none';
-  		}
-  	}
+		// Show error section if there are errors
+		if (errorList.children.length > 0) {
+			errorSection.style.display = 'block';
+		}
+	}
+
+	function updateErrorSection(tableId, data, errorCount) {
+		const errorSection = document.getElementById(`${tableId.replace('Table', 'ErrorSection')}`);
+		errorSection.innerHTML = '';
+
+		if (errorCount > 0) {
+			const errorTitle = document.createElement('h3');
+			errorTitle.textContent = 'Errors Detected';
+			errorSection.appendChild(errorTitle);
+
+			const errorList = document.createElement('div');
+			data.forEach((row, index) => {
+				if (row.isError) {
+					const errorLink = document.createElement('a');
+					errorLink.href = 'javascript:void(0);';
+					errorLink.className = 'error-link';
+					errorLink.textContent = `Error in Row ${index + 1}: ${row.public_Name || 'Unknown'} (${row.errorReasons.join(', ')})`;
+					errorLink.addEventListener('click', () => scrollToRow(tableId, index));
+					errorList.appendChild(errorLink);
+				}
+			});
+			errorSection.appendChild(errorList);
+			errorSection.style.display = 'block';
+		} else {
+			errorSection.style.display = 'none';
+		}
+	}
+
+	function scrollToRow(tableId, rowIndex) {
+		const tableContainer = document.querySelector(`#${tableId}`).closest('.table-container');
+		const row = tableContainer.querySelector(`#${tableId}-row-${rowIndex}`);
+		if (row && tableContainer) {
+			const containerRect = tableContainer.getBoundingClientRect();
+			const rowRect = row.getBoundingClientRect();
+			const headerHeight = tableContainer.querySelector('.sticky-header').offsetHeight;
+			
+			// Calculate the scroll position
+			const scrollTop = rowRect.top - containerRect.top - headerHeight - 10; // 10px extra space
+			
+			// Smooth scroll to the row
+			tableContainer.scrollTo({
+				top: tableContainer.scrollTop + scrollTop,
+				behavior: 'smooth'
+			});
+			
+			// Highlight the row temporarily
+			row.style.transition = 'background-color 0.5s';
+			row.style.backgroundColor = '#ffffa0';
+			setTimeout(() => {
+				row.style.backgroundColor = '';
+				setTimeout(() => {
+					row.style.transition = '';
+				}, 500);
+			}, 1500);
+		}
+	}
 
   	// Add this function to handle all types of changes
 	function recordChange(type, tableId, rowIndex, columnKey, oldValue, newValue) {
@@ -895,44 +1044,122 @@
 		}
 	}
 
-  	function createDropdown(cell, options, initialValue, onSelect) {
-  		const dropdown = document.createElement('div');
-  		dropdown.className = 'dropdown';
-  		const input = document.createElement('input');
-  		input.type = 'text';
-  		input.value = initialValue;
-  		input.style.width = '100%';
-  		const dropdownContent = document.createElement('div');
-  		dropdownContent.className = 'dropdown-content';
+	function createDropdown(cell, options, initialValue, onSelect) {
+		const dropdown = document.createElement('div');
+		dropdown.className = 'dropdown';
+		const input = document.createElement('input');
+		input.type = 'text';
+		input.value = initialValue;
+		input.style.width = '100%';
+		const dropdownContent = document.createElement('div');
+		dropdownContent.className = 'dropdown-content';
 
-  		dropdown.appendChild(input);
-  		dropdown.appendChild(dropdownContent);
-  		cell.appendChild(dropdown);
+		dropdown.appendChild(input);
+		dropdown.appendChild(dropdownContent);
+		cell.appendChild(dropdown);
 
-  		let selectedIndex = -1;
-  		let isDropdownVisible = false;
+		let selectedIndex = -1;
+		let isDropdownVisible = false;
 
-  		function showDropdown() {
-  			dropdownContent.style.display = 'block';
-  			isDropdownVisible = true;
-  			updateDropdownOptions(input.value);
-  		}
+		function positionDropdown() {
+			const rect = input.getBoundingClientRect();
+			const tableContainer = cell.closest('.table-container');
+			const tableRect = tableContainer.getBoundingClientRect();
 
-  		function hideDropdown() {
-  			dropdownContent.style.display = 'none';
-  			isDropdownVisible = false;
-  		}
+			logDebug('Input rect:', rect);
+			logDebug('Table container rect:', tableRect);
 
-  		input.addEventListener('focus', showDropdown);
+			// Calculate position relative to the table container, accounting for scroll
+			const top = rect.top - tableRect.top + tableContainer.scrollTop;
+			const left = rect.left - tableRect.left + tableContainer.scrollLeft;
 
-  		input.addEventListener('blur', () => {
-  			setTimeout(hideDropdown, 200);
-  		});
+			dropdownContent.style.top = `${top + rect.height}px`;
+			dropdownContent.style.left = `${left}px`;
+			dropdownContent.style.minWidth = `${rect.width}px`;
 
-  		input.addEventListener('input', () => {
-  			showDropdown();
-  			updateDropdownOptions(input.value);
-  		});
+			logDebug('Dropdown position:', {
+				top: dropdownContent.style.top,
+				left: dropdownContent.style.left,
+				minWidth: dropdownContent.style.minWidth
+			});
+
+			// Ensure the dropdown doesn't go off-screen
+			const dropdownRect = dropdownContent.getBoundingClientRect();
+			const viewportWidth = window.innerWidth;
+			const viewportHeight = window.innerHeight;
+
+			if (dropdownRect.right > viewportWidth) {
+				const overflowX = dropdownRect.right - viewportWidth;
+				dropdownContent.style.left = `${left - overflowX}px`;
+			}
+
+			if (dropdownRect.bottom > viewportHeight) {
+				dropdownContent.style.top = `${top - dropdownRect.height}px`;
+			}
+
+			// Ensure the dropdown stays within the table container
+			if (parseFloat(dropdownContent.style.top) < 0) {
+				dropdownContent.style.top = '0px';
+			}
+			if (parseFloat(dropdownContent.style.left) < 0) {
+				dropdownContent.style.left = '0px';
+			}
+		}
+
+		function showDropdown() {
+			logDebug('Showing dropdown');
+			dropdownContent.style.display = 'block';
+			dropdownContent.classList.add('visible');
+			isDropdownVisible = true;
+			positionDropdown();
+			updateDropdownOptions(input.value);
+			
+			// Add click event listener to document to close dropdown when clicking outside
+			setTimeout(() => {
+				document.addEventListener('click', closeDropdownOutside);
+			}, 0);
+		}
+
+		function hideDropdown() {
+			logDebug('Hiding dropdown');
+			dropdownContent.style.display = 'none';
+			dropdownContent.classList.remove('visible');
+			isDropdownVisible = false;
+			
+			// Remove click event listener from document
+			document.removeEventListener('click', closeDropdownOutside);
+		}
+
+		function closeDropdownOutside(event) {
+			if (!dropdown.contains(event.target)) {
+				hideDropdown();
+			}
+		}
+	
+		input.addEventListener('focus', (e) => {
+			// Close all other dropdowns before opening this one
+			document.querySelectorAll('.dropdown-content.visible').forEach(el => {
+				if (el !== dropdownContent) {
+					el.style.display = 'none';
+					el.classList.remove('visible');
+				}
+			});
+			showDropdown();
+		});
+
+		input.addEventListener('blur', (e) => {
+			// Delayed hiding to allow for option selection
+			setTimeout(() => {
+				if (!dropdownContent.contains(document.activeElement)) {
+					hideDropdown();
+				}
+			}, 200);
+		});
+
+		input.addEventListener('input', () => {
+			showDropdown();
+			updateDropdownOptions(input.value);
+		});
 
   		input.addEventListener('keydown', (e) => {
   			const items = dropdownContent.querySelectorAll('div:not(.see-all)');
@@ -985,42 +1212,48 @@
   			});
   		}
 
-  		function updateDropdownOptions(filter) {
-  			dropdownContent.innerHTML = '';
-  			selectedIndex = -1;
+		function updateDropdownOptions(filter) {
+			logDebug('Updating dropdown options with filter:', filter);
+			dropdownContent.innerHTML = '';
+			selectedIndex = -1;
 
-  			// Add "See All" option
-  			const seeAllOption = document.createElement('div');
-  			seeAllOption.textContent = 'Click to See All Options';
-  			seeAllOption.className = 'see-all';
-  			seeAllOption.addEventListener('mousedown', (e) => {
-  				e.preventDefault(); // Prevent input blur
-  				updateDropdownOptions('');
-  				input.focus();
-  			});
-  			dropdownContent.appendChild(seeAllOption);
+			// Add "See All" option
+			const seeAllOption = document.createElement('div');
+			seeAllOption.textContent = 'Click to See All Options';
+			seeAllOption.className = 'see-all';
+			seeAllOption.addEventListener('mousedown', (e) => {
+				e.preventDefault(); // Prevent input blur
+				updateDropdownOptions('');
+				input.focus();
+			});
+			dropdownContent.appendChild(seeAllOption);
 
-  			const filteredOptions = filter ?
-  				options.filter(option => option.toLowerCase().includes(filter.toLowerCase())) :
-  				options;
+			const filteredOptions = filter ?
+				options.filter(option => option.toLowerCase().includes(filter.toLowerCase())) :
+				options;
 
-  			filteredOptions.forEach(option => {
-  				const div = document.createElement('div');
-  				div.textContent = option;
-  				div.addEventListener('mousedown', (e) => {
-  					e.preventDefault(); // Prevent input blur
-  					input.value = option;
-  					onSelect(option);
-  					hideDropdown();
-  				});
-  				dropdownContent.appendChild(div);
-  			});
+			logDebug('Filtered options:', filteredOptions);
 
-  			// Update "See All" option text if filtered
-  			if (filter && filteredOptions.length < options.length) {
-  				seeAllOption.textContent = 'Narrowed Selection - Click to See All';
-  			}
-  		}
+			filteredOptions.forEach(option => {
+				const div = document.createElement('div');
+				div.textContent = option;
+				div.addEventListener('mousedown', (e) => {
+					e.preventDefault(); // Prevent input blur
+					input.value = option;
+					onSelect(option);
+					hideDropdown();
+				});
+				dropdownContent.appendChild(div);
+			});
+
+			// Update "See All" option text if filtered
+			if (filter && filteredOptions.length < options.length) {
+				seeAllOption.textContent = 'Narrowed Selection - Click to See All';
+			}
+
+			// Reposition the dropdown after updating options
+			positionDropdown();
+		}
 
   		function navigateToNextRow(currentCell) {
   			const currentRow = currentCell.parentElement;
@@ -1045,7 +1278,26 @@
   				}
   			}
   		}
+		
+		const tableContainer = cell.closest('.table-container');
+		tableContainer.addEventListener('scroll', () => {
+			if (isDropdownVisible) {
+				positionDropdown();
+			}
+		});
+
+		return dropdown;
+	
   	}
+
+	function positionDropdown(dropdown, trigger) {
+		const rect = trigger.getBoundingClientRect();
+		const dropdownContent = dropdown.querySelector('.dropdown-content');
+		
+		dropdownContent.style.top = `${rect.bottom + window.scrollY}px`;
+		dropdownContent.style.left = `${rect.left + window.scrollX}px`;
+		dropdownContent.style.width = `${rect.width}px`;
+	}
 
   	function handleCellKeyDown(event) {
   		if (event.key === 'Enter') {
@@ -1109,6 +1361,12 @@
 		}
 	}
 
+	function checkAllDataSaved() {
+		hasUnsavedChanges = (tableEdited.add && !csvDownloaded.add) ||
+							(tableEdited.remove && !csvDownloaded.remove) ||
+							(tableEdited.change && !csvDownloaded.change);
+	}
+
 	function downloadCSV(action) {
 		let data;
 		if (action === 'add') {
@@ -1145,12 +1403,6 @@
 		tableEdited[action] = false; // Reset the edited flag after download
 		updateDownloadButton(action);
 		checkAllDataSaved();
-	}
-
-	function checkAllDataSaved() {
-		hasUnsavedChanges = (tableEdited.add && !csvDownloaded.add) ||
-							(tableEdited.remove && !csvDownloaded.remove) ||
-							(tableEdited.change && !csvDownloaded.change);
 	}
 
   	function guessOSType(row) {
