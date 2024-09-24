@@ -141,10 +141,11 @@
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.5.0"></div>
+    <div id="versionInfo" data-version="1.5.1"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
+            <li>v1.5.1:<br />- Fixed some UTF-8 related issues with certain characters.<br />- Fixed bug with data being cleared from the 'dropdown' cells where you manually entered data.</li><br />
             <li>v1.5.0:<br />- Revamped tables to lock key info columns while scrolling in addition to a sticky header.<br />- Fixed bug with Scrolling to Error line<br />- Fixed bug with any cells containing commas which would offset the rest of that line.</li><br />
 			<li>v1.4.9:<br />- Slight styling tweaks.</li><br />
             <li>v1.4.8:<br />- Added sticky header on each table so you can identify what columns are what.</li><br />
@@ -216,7 +217,7 @@
 
     <script>
 
-	let debugMode = false; // Set this to true when you need to debug
+	let debugMode = true; // Set this to true when you need to debug
 	const showTimestamp = false; // Set to false if you don't want timestamps in logs
 	
 	let allow_blank_ip = true;
@@ -1111,6 +1112,14 @@ function scrollToRow(tableId, rowIndex) {
 			}, 200);
 		});
 
+		input.addEventListener('change', () => {
+			const enteredValue = input.value;
+			if (!options.includes(enteredValue)) {
+				options.push(enteredValue); // Add the new value to options
+			}
+			onSelect(enteredValue);
+		});
+		
 		input.addEventListener('input', () => {
 			showDropdown();
 			updateDropdownOptions(input.value);
@@ -1326,13 +1335,13 @@ function scrollToRow(tableId, rowIndex) {
 			return;
 		}
 
-		const csv = [
+		const csv = '\ufeff' + [ // Add BOM for UTF-8
 			requiredColumns.join(','), // Add column headers
 			...data.map(row => 
 				requiredColumns.map(key => {
 					let value = row[key];
-					// If the field contains a comma, wrap it in double quotes
-					if (typeof value === 'string' && value.includes(',')) {
+					// If the field contains a comma or special characters, wrap it in double quotes
+					if (typeof value === 'string' && (value.includes(',') || /[^\u0000-\u007f]/.test(value))) {
 						value = `"${value.replace(/"/g, '""')}"`; // Escape any existing quotes by doubling them
 					}
 					return value;
