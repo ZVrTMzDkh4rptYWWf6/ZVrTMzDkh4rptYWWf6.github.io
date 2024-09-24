@@ -5,199 +5,148 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MDAC Formatter</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        textarea { width: 100%; height: 200px; }
-        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; }
-        .editable { background-color: #f0f0f0; }
-        button { margin: 10px 0; }
-        #configPanel { margin-bottom: 20px; }
-        .public-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-        .see-all { font-size: 0.8em; color: #666; font-style: italic; background-color: #e9e9e9; }
+
+		body { font-family: Arial, sans-serif; margin: 20px; }
+		textarea { width: 100%; height: 200px; }
+		button { margin: 10px 0; }
+		#configPanel { margin-bottom: 20px; }
+
+		/* Table Styles */
+		.table-container {
+			max-height: 700px; overflow: auto; position: relative; z-index: 1; width: 100%;
+		}
+		.table-wrapper { display: flex; min-width: 100%; width: max-content; }
+		table { border-collapse: separate; border-spacing: 0; width: 100%; margin-bottom: 20px; }
+		th, td {
+			border: 1px solid #ddd; padding: 8px; white-space: nowrap;
+			overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;
+		}
+		.frozen-table, .scrollable-table { border-collapse: separate; border-spacing: 0; }
+		.frozen-table {
+			position: sticky; left: 0; z-index: 5; background-color: #fff;
+		}
+		.frozen-table::after {
+			content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 2px;
+			background-color: #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+		}
+		.scrollable-table { flex: 1; z-index: 2; min-width: max-content; }
+		.frozen-table tr, .scrollable-table tr { height: 41px; }
+		.frozen-table td, .scrollable-table td { height: 100%; }
+		.scrollable-table th:first-child, .scrollable-table td:first-child { padding-left: 8px; }
+
+		/* Header Styles */
+		.sticky-header-l th, .sticky-header-r th {
+			position: sticky; top: 0; background-color: #f8f8f8;
+		}
+		.sticky-header-l th { z-index: 6; }
+		.sticky-header-r th { z-index: 3; }
+
+		/* Scrollbar Styles */
+		.table-container::-webkit-scrollbar { height: 12px; }
+		.table-container::-webkit-scrollbar-thumb {
+			background-color: #888; border-radius: 6px;
+		}
+		.table-container::-webkit-scrollbar-track { background-color: #f0f0f0; }
+
+		/* Error Styles */
+		.error-row, .error-row td { background-color: #ffeecc; }
+		.invalid-ip, .invalid-name { background-color: #ffcccc !important; }
+		.error-section {
+			background-color: #FFECB3; border: 1px solid #FFC107;
+			padding: 15px; margin-bottom: 15px; border-radius: 5px;
+		}
+		.error-section h3 { margin: 0 0 10px 0; }
+		.error-link {
+			display: block; color: #D32F2F; text-decoration: none;
+			margin-bottom: 3px; line-height: 1.2;
+		}
+		.error-link:last-child { margin-bottom: 0; }
+		.error-link:hover { text-decoration: underline; }
+
+		/* Status Styles */
+		.status-badge {
+			font-size: 0.8em; padding: 2px 5px; border-radius: 3px; color: white;
+		}
+		.status-valid { background-color: #4CAF50; }
+		.status-error { background-color: #F44336; }
+
+		/* Misc Styles */
+		.public-name { max-width: 200px; }
+		.line-number { width: 30px; text-align: right; color: #888; padding-right: 10px; }
 		.trash-icon { cursor: pointer; }
-        #updateNotification {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background-color: #f0f0f0;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            display: none;
-			z-index: 999;
-        }
-        #versionDisplay {
-            font-size: 0.5em;
-            vertical-align: middle;
-            margin-left: 10px;
-            cursor: pointer;
-            position: relative;
-            display: inline-block;
-        }
-        #versionDisplay:hover #changelogTooltip { display: block; }
+		.see-all {
+			font-size: 0.8em; color: #666; font-style: italic; background-color: #e9e9e9;
+		}
+
+		/* Dropdown Styles */
+		.dropdown { position: static; display: inline-block; width: 100%; }
+		.dropdown-content {
+			display: none; position: absolute; background-color: #f9f9f9;
+			min-width: 200px; width: max-content; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+			max-height: 200px; overflow-y: auto; z-index: 9999;
+		}
+		.dropdown-content.visible { display: block !important; }
+		.dropdown-content div {
+			padding: 12px 16px; text-decoration: none; display: block;
+			cursor: pointer; white-space: nowrap;
+		}
+		.dropdown-content div:hover, .dropdown-content div.selected { background-color: #f1f1f1; }
+
+		/* Update Notification */
+		#updateNotification {
+			position: fixed; top: 10px; right: 10px; background-color: #f0f0f0;
+			padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+			display: none; z-index: 999;
+		}
+
+		/* Version Display */
+		#versionDisplay {
+			font-size: 0.5em; vertical-align: middle; margin-left: 10px;
+			cursor: pointer; position: relative; display: inline-block;
+		}
+		#versionDisplay:hover #changelogTooltip { display: block; }
+
+		/* Changelog Tooltip */
 		#changelogTooltip {
-			position: absolute;
-			display: none;
-			background-color: #444;
-			color: #fff;
-			text-align: left;
-			border-radius: 8px;
-			padding: 15px;
-			width: 600px;
-			max-width: 90vw;
-			top: 100%;
-			left: 50%;
-			transform: translateX(-19%);
-			z-index: 9999;
-			margin-top: 10px;
-			box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-			font-size: 14px;
-			line-height: 1.4;
+			position: absolute; display: none; background-color: #444; color: #fff;
+			text-align: left; border-radius: 8px; padding: 15px; width: 600px;
+			max-width: 90vw; top: 100%; left: 50%; transform: translateX(-19%);
+			z-index: 9999; margin-top: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+			font-size: 14px; line-height: 1.4;
 		}
 		#changelogTooltip h3 {
-			margin-top: 0;
-			margin-bottom: 10px;
-			text-align: center;
-			font-size: 18px;
-			border-bottom: 1px solid #666;
-			padding-bottom: 5px;
+			margin: 0 0 10px 0; text-align: center; font-size: 18px;
+			border-bottom: 1px solid #666; padding-bottom: 5px;
 		}
 		#changelogTooltip ul { margin: 0; padding-left: 20px; }
 		#changelogTooltip li { margin-bottom: 10px; }
 		#changelogTooltip li:last-child { margin-bottom: 0; }
 		#changelogTooltip::before {
-			content: '';
-			position: absolute;
-			top: -10px;
-			left: 20%;
-			transform: translateX(-50%);
-			border-width: 0 10px 10px 10px;
-			border-style: solid;
-			border-color: transparent transparent #444 transparent;
-		}
-        .status-badge {
-            font-size: 0.8em;
-            padding: 2px 5px;
-            border-radius: 3px;
-            color: white;
-        }
-        .status-valid { background-color: #4CAF50; }
-        .status-error { background-color: #F44336; }
-		.error-row { background-color: #ffeecc; }
-		.error-row td { background-color: #ffeecc; }
-		.error-section {
-			background-color: #FFECB3;
-			border: 1px solid #FFC107;
-			padding: 15px;  /* Changed from 20px */
-			margin-bottom: 15px;  /* Changed from 10px */
-			border-radius: 5px;
-		}
-		.h2 { margin-top: 10px; }
-		hr { margin-top: 20px; }
-		.error-section h3 { margin-top: 0; margin-bottom: 10px; }
-		.error-link {
-			display: block;
-			color: #D32F2F;
-			text-decoration: none;
-			margin-bottom: 3px;  /* Reduced from 5px */
-			line-height: 1.2;  /* Added to reduce space between lines */
-		}
-		.error-link:last-child { margin-bottom: 0;  /* Remove margin from the last error link */ }
-        .error-link:hover { text-decoration: underline; }
-        .line-number {
-            width: 30px;
-            text-align: right;
-            color: #888;
-            padding-right: 10px;
-        }
-		.invalid-ip, .invalid-name { background-color: #ffcccc !important; }
-        #processingOverlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            z-index: 1000;
-        }
-        #processingBox {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: white;
-            padding: 20px;
-            border-radius: 5px;
-            text-align: center;
-        }
-		
-		.table-container {
-			max-height: 700px;
-			overflow-y: auto;
-			position: relative; /* Add this */
-		}
-		.table-container table {
-			width: 100%;
-			border-collapse: separate;
-			border-spacing: 0;
-		}
-		.sticky-header th {
-			position: sticky;
-			top: 0;
-			background-color: #f8f8f8;
-			z-index: 2; /* Reduced from 500 */
-			box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
-		}
-		.table-container {
-			position: relative;
-			z-index: 1;
-		}
-		.dropdown {
-			position: static;
-			display: inline-block;
-			width: 100%;
-		}
-		.dropdown-content {
-			display: none;
-			position: absolute;
-			background-color: #f9f9f9;
-			min-width: 200px;
-			width: max-content;
-			box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-			max-height: 200px;
-			overflow-y: auto;
-			z-index: 9999;
-		}
-		.dropdown-content.visible { display: block !important; }
-		.dropdown-content div {
-			padding: 12px 16px;
-			text-decoration: none;
-			display: block;
-			cursor: pointer;
-			white-space: nowrap;
-		}
-		.dropdown-content div:hover,
-		.dropdown-content div.selected {
-			background-color: #f1f1f1;
+			content: ''; position: absolute; top: -10px; left: 20%;
+			transform: translateX(-50%); border-width: 0 10px 10px 10px;
+			border-style: solid; border-color: transparent transparent #444 transparent;
 		}
 
-		th, td {
-			padding: 8px;
-			border: 1px solid #ddd;
-			white-space: nowrap;
-			overflow: hidden;
-			text-overflow: ellipsis;
+		/* Processing Overlay */
+		#processingOverlay {
+			display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+			background-color: rgba(0,0,0,0.5); z-index: 1000;
 		}
+		#processingBox {
+			position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+			background-color: white; padding: 20px; border-radius: 5px; text-align: center;
+		}
+
     </style>
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.4.9"></div>
+    <div id="versionInfo" data-version="1.5.0"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
-            <li>v1.4.9:<br />- Slight styling tweaks.</li><br />
+            <li>v1.5.0:<br />- Revamped tables to lock key info columns while scrolling in addition to a sticky header.<br />- Fixed bug with Scrolling to Error line<br />- Fixed bug with any cells containing commas which would offset the rest of that line.</li><br />
+			<li>v1.4.9:<br />- Slight styling tweaks.</li><br />
             <li>v1.4.8:<br />- Added sticky header on each table so you can identify what columns are what.</li><br />
             <li>v1.4.7:<br />- Added safety feature to prevent data loss when you make changes to a table and haven't downloaded the csv yet.</li><br />
             <li>v1.4.6:<br />- Added redo function (ctrl+y or ctrl+shift+z).</li><br />
@@ -205,7 +154,6 @@
             <li>v1.4.4:<br />- Added Changelog Display</li><br />
             <li>v1.4.3:<br />- Added version display and changelog</li><br />
             <li>v1.4.2:<br />- Improved error handling</li><br />
-            <li>v1.4.1:<br />- Fixed minor bugs</li>
         </ul>
     </div>
     <div id="updateNotification" style="display: none;">
@@ -301,12 +249,12 @@
   		change: false
 	};
 
-  	const requiredColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
+  	const requiredColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igsdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
 
   	const dropdownOptions = {
   		'lvs.igsservicetower': ['Citrix', 'Cloud', 'Database', 'Internal Systems', 'Linux', 'Messaging', 'Network', 'Network Voice', 'NOC', 'Server', 'Storage & Backup', 'Virtualization', 'Windows'],
   		'lvs.ostype': ['Network', 'Windows', 'Linux', 'VMware', 'Other', 'NTAP', 'Cisco ASA', 'FortiOS', 'iLO', 'NX-OS', 'Xen'],
-  		'lvs.igdeviceclass': ['Citrix ADC', 'Linux Virtualized', 'Windows Virtualized', 'Virtual SQL Server', 'NOC Toolset', 'SOC Toolset', 'Virtual Active Directory', 'Virtual Exchange', 'Physical Host/Blade Chassis', 'Office Firewall', 'Router', 'Edge Switch', 'Core Switch', 'Wireless Controller', 'Wireless Access Point']
+  		'lvs.igsdeviceclass': ['Citrix ADC', 'Linux Virtualized', 'Windows Virtualized', 'Virtual SQL Server', 'NOC Toolset', 'SOC Toolset', 'Virtual Active Directory', 'Virtual Exchange', 'Physical Host/Blade Chassis', 'Office Firewall', 'Router', 'Edge Switch', 'Core Switch', 'Wireless Controller', 'Wireless Access Point']
   	};
 
   	// Debug Function to log messages to console if enabled at top of script
@@ -440,7 +388,7 @@
   			row['lvs.supportlevel'] = values[findColumnIndex(headers, ['support level', 'supportlevel'])] || '';
   			row['lvs.confidentialityclass'] = values[findColumnIndex(headers, ['confidentiality class', 'confidentialityclass'])] || '';
   			row['lvs.deviceplatform'] = values[findColumnIndex(headers, ['platform'])] || '';
-  			row['lvs.igdeviceclass'] = values[findColumnIndex(headers, ['igs device class', 'igsdeviceclass'])] || '';
+  			row['lvs.igsdeviceclass'] = values[findColumnIndex(headers, ['igs device class', 'igsdeviceclass'])] || '';
   			row['lvs.igsservicetower'] = values[findColumnIndex(headers, ['igs service tower', 'igsservicetower'])] || '';
   			row['lvs.ostype'] = values[findColumnIndex(headers, ['os type', 'ostype'])] || '';
   			row['lvs.igsbackup'] = values[findColumnIndex(headers, ['igs backup', 'igsbackup'])] || '';
@@ -475,12 +423,6 @@
   					changeCount++;
   				}
   			}
-
-  			// This is contained within the displayTable function
-  			//if (!row['lvs.hostname'] || !row['lvs.assetfunction']) {
-  			//	row.isError = true;
-  			//	errorCount++;
-  			//}
 
   		});
 
@@ -632,210 +574,251 @@
   	}
 
 
-  	function displayTable(tableId, data) {
-  		logDebug('Displaying table:', tableId);
-		const table = document.getElementById(tableId);
-		table.innerHTML = '';
+function displayTable(tableId, data) {
+    logDebug(`Starting displayTable function for ${tableId}`);
+    const container = document.getElementById(tableId);
+    container.innerHTML = ''; // Clear existing content
+    container.className = 'table-container';
 
-		let tableErrorCount = 0;
+    // Create wrapper for both tables
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-wrapper';
+    container.appendChild(wrapper);
 
-		// Create header row
-		const headerRow = table.createTHead().insertRow();
-		headerRow.className = 'sticky-header';
+    // Create frozen columns table
+    const frozenTable = document.createElement('table');
+    frozenTable.className = 'data-table frozen-table';
+    wrapper.appendChild(frozenTable);
 
-  		// Add columns for line number, trash icon, and status
-		['#', '', 'Status', ...requiredColumns].forEach(header => {
-			const th = document.createElement('th');
-			th.textContent = header;
-			headerRow.appendChild(th);
-		});
+    // Create scrollable columns table
+    const scrollableTable = document.createElement('table');
+    scrollableTable.className = 'data-table scrollable-table';
+    wrapper.appendChild(scrollableTable);
 
-		// Create table body
-		const tbody = table.createTBody();
-	
-  		// Create data rows
-  		data.forEach((row, rowIndex) => {
-			const tr = tbody.insertRow();
-			tr.id = `${tableId}-row-${rowIndex}`;
+	// Create header rows
+	createTableHeader(frozenTable, ['#', '', 'Status', 'public_Name', 'lvs.hostname'], true);
+	createTableHeader(scrollableTable, requiredColumns.slice(2), false);
 
-			// Add line number cell
-			const lineNumberCell = tr.insertCell();
-			lineNumberCell.textContent = rowIndex + 1;
-			lineNumberCell.className = 'line-number';
 
-  			// Determine if this row has errors
-  			const isIPValid = isValidIP(row['lvs.hostname']);
-  			const isNameValid = !isInvalidHostname(row['public_Name']);
-  			const errorReasons = [];
+    // Create table bodies
+    const frozenBody = frozenTable.createTBody();
+    const scrollableBody = scrollableTable.createTBody();
 
-  			if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
-  				errorReasons.push('Invalid IP Address');
-  			}
-  			if (!isNameValid) {
-  				errorReasons.push('Invalid Hostname');
-  			}
+    let tableErrorCount = 0;
 
-  			row.isError = errorReasons.length > 0;
-  			row.errorReasons = errorReasons;
+    // Create data rows
+    data.forEach((row, rowIndex) => {
+        // Determine if this row has errors
+        const isIPValid = isValidIP(row['lvs.hostname']);
+        const isNameValid = !isInvalidHostname(row['public_Name']);
+        const errorReasons = [];
 
-  			if (row.isError) {
-  				tableErrorCount++;
-  			}
+        if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
+            errorReasons.push('Invalid IP Address');
+        }
+        if (!isNameValid) {
+            errorReasons.push('Invalid Hostname');
+        }
 
-  			// Add trash icon cell
-			const trashCell = tr.insertCell();
-			if (row.isError) {
-				const trashIcon = document.createElement('span');
-				trashIcon.innerHTML = '🗑️';
-				trashIcon.className = 'trash-icon';
-				trashIcon.onclick = () => removeRow(tableId, rowIndex);
-				trashCell.appendChild(trashIcon);
-			}
+        row.isError = errorReasons.length > 0;
+        row.errorReasons = errorReasons;
 
-  			// Add status cell
-			const statusCell = tr.insertCell();
-			const statusBadge = document.createElement('span');
-			statusBadge.className = `status-badge ${row.isError ? 'status-error' : 'status-valid'}`;
-			statusBadge.textContent = row.isError ? 'Error' : 'Valid';
-			statusCell.appendChild(statusBadge);
+        if (row.isError) {
+            tableErrorCount++;
+        }
 
-  			// Add data cells
-  			requiredColumns.forEach((key, colIndex) => {
-  				const td = tr.insertCell();
+        createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId);
+    });
 
-  				if (tableId === 'addTable' && key in dropdownOptions) {
-  					createDropdown(td, dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
-  				} else {
-  					td.contentEditable = true;
-  					td.className = 'editable';
+    // Synchronize scroll
+    synchronizeScroll(frozenBody, scrollableBody);
 
-  					if (key === 'public_Name') {
-  						td.classList.add('public-name');
-  						if (isInvalidHostname(row[key])) {
-  							td.classList.add('invalid-name');
-  						}
-  						td.textContent = row[key];
-  					} else if (key === 'lvs.hostname') {
-  						const cleanedIP = row[key].trim().replace(/[^\d.]/g, '');
-  						if (!isValidIP(cleanedIP) && !(allow_blank_ip && cleanedIP === '')) {
-  							td.classList.add('invalid-ip');
-  						}
-  						td.textContent = cleanedIP;
-  						row[key] = cleanedIP; // Update the data array with the cleaned IP
-  					} else {
-  						td.textContent = row[key];
-  					}
+    // Update error section
+    updateErrorSection(tableId, data, tableErrorCount);
 
-  					td.dataset.row = rowIndex;
-  					td.dataset.col = colIndex;
-  					td.addEventListener('keydown', handleCellKeyDown);
-  					td.addEventListener('blur', (event) => {
-  						const newValue = event.target.textContent;
-  						if (newValue !== row[key]) { // Only update if the value has changed
-  							logDebug('Cell value changed:', {
-  								tableId,
-  								rowIndex,
-  								key,
-  								oldValue: row[key],
-  								newValue
-  							});
-  							updateData(tableId, rowIndex, key, newValue);
-  						}
-  						if (key === 'lvs.hostname') {
-  							td.classList.toggle('invalid-ip', !isValidIP(newValue));
-  						} else if (key === 'public_Name') {
-  							td.classList.toggle('invalid-name', isInvalidHostname(newValue));
-  						}
-  					});
+    // Update the heading
+    //updateTableHeading(tableId, data, tableErrorCount);
 
-  					// Add focus event listener to move cursor to end
-  					td.addEventListener('focus', function() {
-  						const range = document.createRange();
-  						const sel = window.getSelection();
-  						range.selectNodeContents(this);
-  						range.collapse(false); // false means collapse to end
-  						sel.removeAllRanges();
-  						sel.addRange(range);
-  					});
-  				}
-  			});
-  		});
+    const action = tableId.replace('Table', '');
+    updateDownloadButton(action);
 
-		table.appendChild(tbody);
-		
-  		// Update error section
-  		updateErrorSection(tableId, data, tableErrorCount);
+    logDebug(`Finished displayTable function for ${tableId}. Error count: ${tableErrorCount}`);
+}
 
-  		// Update the heading
-  		const headingId = `${tableId.replace('Table', 'Heading')}`;
-  		const heading = document.getElementById(headingId);
-  		const actionType = tableId.replace('Table', '');
-  		const capitalizedActionType = actionType.charAt(0).toUpperCase() + actionType.slice(1);
-  		heading.textContent = `${capitalizedActionType} Actions (${data.length}) ${tableErrorCount > 0 ? `| ${tableErrorCount} error${tableErrorCount > 1 ? 's' : ''}` : ''}`;
+function createTableHeader(table, headers, isLeftTable) {
+    const thead = table.createTHead();
+    const headerRow = thead.insertRow();
+    headerRow.className = isLeftTable ? 'sticky-header-l' : 'sticky-header-r';
+    headers.forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        headerRow.appendChild(th);
+    });
+}
 
-		const action = tableId.replace('Table', '');
-		updateDownloadButton(action);
+function createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId) {
+    const frozenRow = frozenBody.insertRow();
+    const scrollableRow = scrollableBody.insertRow();
+    
+    frozenRow.id = `${tableId}-row-${rowIndex}-frozen`;
+    scrollableRow.id = `${tableId}-row-${rowIndex}-scrollable`;
 
-  		logDebug('Table display completed');
-  	}
+    if (row.isError) {
+        frozenRow.classList.add('error-row');
+        scrollableRow.classList.add('error-row');
+    }
 
-	function setupStickyHeaders() {
-		const tables = document.querySelectorAll('.table-container table');
-		tables.forEach(table => {
-			const header = table.querySelector('.sticky-header');
-			const tableContainer = table.closest('.table-container');
-			const headerHeight = header.offsetHeight;
+    // Add cells to frozen row
+    addLineNumberCell(frozenRow, rowIndex);
+    addTrashIconCell(frozenRow, row, rowIndex, tableId);
+    addStatusCell(frozenRow, row);
+    addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId);
+    addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
 
-			let ticking = false;
-			tableContainer.addEventListener('scroll', () => {
-				if (!ticking) {
-					window.requestAnimationFrame(() => {
-						header.style.transform = `translateY(${tableContainer.scrollTop}px)`;
-						ticking = false;
-					});
-					ticking = true;
-				}
-			});
+    // Add cells to scrollable row
+    requiredColumns.slice(2).forEach((key, colIndex) => {
+        if (tableId === 'addTable' && key in dropdownOptions) {
+            createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
+        } else {
+            addEditableCell(scrollableRow, row, key, rowIndex, colIndex + 5, tableId);
+        }
+    });
+}
 
-			// Adjust the body margin to account for the header
-			const tableBody = table.querySelector('.table-body');
-			tableBody.style.marginTop = `${headerHeight}px`;
-		});
+function synchronizeScroll(frozenBody, scrollableBody) {
+    const container = scrollableBody.closest('.table-container');
+    container.addEventListener('scroll', function() {
+        frozenBody.style.transform = `translateY(-${this.scrollTop}px)`;
+    });
+}
+
+function scrollToRow(tableId, rowIndex) {
+    logDebug(`Attempting to scroll to row ${rowIndex} in table ${tableId}`);
+    
+    // Scroll the main window up by 1 pixel
+    window.scrollBy(0, -1);
+    
+    setTimeout(() => {
+        const container = document.querySelector(`#${tableId}`);
+        logDebug(`Container found: ${!!container}`);
+        
+        const frozenRow = container.querySelector(`.frozen-table tbody tr:nth-child(${rowIndex + 1})`);
+        logDebug(`Frozen row found: ${!!frozenRow}`);
+        
+        const scrollableRow = container.querySelector(`.scrollable-table tbody tr:nth-child(${rowIndex + 1})`);
+        logDebug(`Scrollable row found: ${!!scrollableRow}`);
+
+        if (frozenRow && scrollableRow && container) {
+            // Force a reflow
+            void container.offsetHeight;
+
+            // Scroll to the row
+            frozenRow.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'nearest'
+            });
+            logDebug('Scrolled to row');
+            
+            // Highlight the row temporarily
+            frozenRow.style.transition = 'background-color 0.5s';
+            scrollableRow.style.transition = 'background-color 0.5s';
+            frozenRow.style.backgroundColor = '#ffffa0';
+            scrollableRow.style.backgroundColor = '#ffffa0';
+            setTimeout(() => {
+                frozenRow.style.backgroundColor = '';
+                scrollableRow.style.backgroundColor = '';
+                setTimeout(() => {
+                    frozenRow.style.transition = '';
+                    scrollableRow.style.transition = '';
+                }, 500);
+            }, 1500);
+            logDebug('Row highlighting applied');
+        } else {
+            logDebug('Failed to find necessary elements for scrolling');
+        }
+    }, 50); // Small delay to ensure DOM is updated
+}
+
+	function addLineNumberCell(row, rowIndex) {
+		const cell = row.insertCell();
+		cell.textContent = rowIndex + 1;
+		cell.className = 'line-number';
 	}
 
-	function createErrorSection(tableId, data) {
-		const errorSection = document.createElement('div');
-		errorSection.className = 'error-section';
-		errorSection.style.display = 'none';
-
-		const errorTitle = document.createElement('h3');
-		errorTitle.textContent = 'Errors Detected';
-		errorSection.appendChild(errorTitle);
-
-		const errorList = document.createElement('div');
-		data.forEach((row, index) => {
-			if (row.isError) {
-				const errorLink = document.createElement('a');
-				errorLink.href = 'javascript:void(0);';
-				errorLink.className = 'error-link';
-				const errorMessage = `Error in Row ${index + 1}: ${row.public_Name || 'Unknown'} (${row.errorReasons.join(', ')})`;
-				errorLink.textContent = errorMessage;
-				errorLink.addEventListener('click', () => scrollToRow(tableId, index));
-				errorList.appendChild(errorLink);
-			}
-		});
-		errorSection.appendChild(errorList);
-
-		const table = document.getElementById(tableId);
-		table.parentNode.insertBefore(errorSection, table);
-
-		// Show error section if there are errors
-		if (errorList.children.length > 0) {
-			errorSection.style.display = 'block';
+	function addTrashIconCell(row, dataRow, rowIndex, tableId) {
+		const cell = row.insertCell();
+		if (dataRow.isError) {
+			const trashIcon = document.createElement('span');
+			trashIcon.innerHTML = '🗑️';
+			trashIcon.className = 'trash-icon';
+			trashIcon.onclick = () => removeRow(tableId, rowIndex);
+			cell.appendChild(trashIcon);
 		}
 	}
 
+	function addStatusCell(row, dataRow) {
+		const cell = row.insertCell();
+		const statusBadge = document.createElement('span');
+		statusBadge.className = `status-badge ${dataRow.isError ? 'status-error' : 'status-valid'}`;
+		statusBadge.textContent = dataRow.isError ? 'Error' : 'Valid';
+		cell.appendChild(statusBadge);
+	}
+
+	function addEditableCell(row, dataRow, key, rowIndex, colIndex, tableId) {
+		const cell = row.insertCell();
+		cell.contentEditable = true;
+		cell.className = 'editable';
+
+		if (key === 'public_Name') {
+			cell.classList.add('public-name');
+			if (isInvalidHostname(dataRow[key])) {
+				cell.classList.add('invalid-name');
+			}
+			cell.textContent = dataRow[key]; // Ensure the public_Name is displayed
+		} else if (key === 'lvs.hostname') {
+			const cleanedIP = dataRow[key].trim().replace(/[^\d.]/g, '');
+			if (!isValidIP(cleanedIP) && !(allow_blank_ip && cleanedIP === '')) {
+				cell.classList.add('invalid-ip');
+			}
+			cell.textContent = cleanedIP;
+			dataRow[key] = cleanedIP; // Update the data array with the cleaned IP
+		} else {
+			cell.textContent = dataRow[key];
+		}
+
+		cell.dataset.row = rowIndex;
+		cell.dataset.col = colIndex;
+		cell.dataset.key = key;
+		cell.addEventListener('keydown', handleCellKeyDown);
+		cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key));
+	}
+
+	function handleCellBlur(event, tableId, rowIndex, key) {
+		const newValue = event.target.textContent;
+		let data;
+		if (tableId === 'addTable') {
+			data = addData;
+		} else if (tableId === 'removeTable') {
+			data = removeData;
+		} else if (tableId === 'changeTable') {
+			data = changeData;
+		}
+
+		if (newValue !== data[rowIndex][key]) {
+			updateData(tableId, rowIndex, key, newValue);
+		}
+		
+		if (key === 'lvs.hostname') {
+			event.target.classList.toggle('invalid-ip', !isValidIP(newValue));
+		} else if (key === 'public_Name') {
+			event.target.classList.toggle('invalid-name', isInvalidHostname(newValue));
+		}
+	}
+
+
 	function updateErrorSection(tableId, data, errorCount) {
+		logDebug(`Updating error section for ${tableId}. Error count: ${errorCount}`);
 		const errorSection = document.getElementById(`${tableId.replace('Table', 'ErrorSection')}`);
 		errorSection.innerHTML = '';
 
@@ -847,11 +830,15 @@
 			const errorList = document.createElement('div');
 			data.forEach((row, index) => {
 				if (row.isError) {
+					logDebug(`Creating error link for row ${index}`);
 					const errorLink = document.createElement('a');
 					errorLink.href = 'javascript:void(0);';
 					errorLink.className = 'error-link';
 					errorLink.textContent = `Error in Row ${index + 1}: ${row.public_Name || 'Unknown'} (${row.errorReasons.join(', ')})`;
-					errorLink.addEventListener('click', () => scrollToRow(tableId, index));
+					errorLink.addEventListener('click', () => {
+						logDebug(`Error link clicked for row ${index}`);
+						setTimeout(() => scrollToRow(tableId, index), 0);
+					});
 					errorList.appendChild(errorLink);
 				}
 			});
@@ -860,36 +847,10 @@
 		} else {
 			errorSection.style.display = 'none';
 		}
+		logDebug('Error section update completed');
 	}
 
-	function scrollToRow(tableId, rowIndex) {
-		const tableContainer = document.querySelector(`#${tableId}`).closest('.table-container');
-		const row = tableContainer.querySelector(`#${tableId}-row-${rowIndex}`);
-		if (row && tableContainer) {
-			const containerRect = tableContainer.getBoundingClientRect();
-			const rowRect = row.getBoundingClientRect();
-			const headerHeight = tableContainer.querySelector('.sticky-header').offsetHeight;
-			
-			// Calculate the scroll position
-			const scrollTop = rowRect.top - containerRect.top - headerHeight - 10; // 10px extra space
-			
-			// Smooth scroll to the row
-			tableContainer.scrollTo({
-				top: tableContainer.scrollTop + scrollTop,
-				behavior: 'smooth'
-			});
-			
-			// Highlight the row temporarily
-			row.style.transition = 'background-color 0.5s';
-			row.style.backgroundColor = '#ffffa0';
-			setTimeout(() => {
-				row.style.backgroundColor = '';
-				setTimeout(() => {
-					row.style.transition = '';
-				}, 500);
-			}, 1500);
-		}
-	}
+
 
   	// Add this function to handle all types of changes
 	function recordChange(type, tableId, rowIndex, columnKey, oldValue, newValue) {
@@ -1284,15 +1245,6 @@
 	
   	}
 
-	function positionDropdown(dropdown, trigger) {
-		const rect = trigger.getBoundingClientRect();
-		const dropdownContent = dropdown.querySelector('.dropdown-content');
-		
-		dropdownContent.style.top = `${rect.bottom + window.scrollY}px`;
-		dropdownContent.style.left = `${rect.left + window.scrollX}px`;
-		dropdownContent.style.width = `${rect.width}px`;
-	}
-
   	function handleCellKeyDown(event) {
   		if (event.key === 'Enter') {
   			event.preventDefault();
@@ -1375,8 +1327,17 @@
 		}
 
 		const csv = [
-			requiredColumns.join(','),
-			...data.map(row => requiredColumns.map(key => row[key]).join(','))
+			requiredColumns.join(','), // Add column headers
+			...data.map(row => 
+				requiredColumns.map(key => {
+					let value = row[key];
+					// If the field contains a comma, wrap it in double quotes
+					if (typeof value === 'string' && value.includes(',')) {
+						value = `"${value.replace(/"/g, '""')}"`; // Escape any existing quotes by doubling them
+					}
+					return value;
+				}).join(',')
+			)
 		].join('\n');
 
 		const blob = new Blob([csv], {
@@ -1399,8 +1360,9 @@
 		checkAllDataSaved();
 	}
 
+
   	function guessOSType(row) {
-  		const deviceClass = row['lvs.igdeviceclass'].toLowerCase();
+  		const deviceClass = row['lvs.igsdeviceclass'].toLowerCase();
   		const assetFunction = row['lvs.assetfunction'].toLowerCase();
   		const publicName = row['public_Name'].toLowerCase();
 
@@ -1428,7 +1390,7 @@
   	}
 
   	function guessIGSServiceTower(row) {
-  		const deviceClass = row['lvs.igdeviceclass'].toLowerCase();
+  		const deviceClass = row['lvs.igsdeviceclass'].toLowerCase();
   		const assetFunction = row['lvs.assetfunction'].toLowerCase();
   		const osType = row['lvs.ostype'].toLowerCase();
 
