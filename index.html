@@ -109,9 +109,6 @@
             color: #888;
             padding-right: 10px;
         }
-        .invalid-ip {
-            background-color: #FFCDD2;
-        }
 		.invalid-ip, .invalid-name {
 			background-color: #ffcccc !important;
 		}
@@ -139,12 +136,13 @@
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.4.6"></div>
+    <div id="versionInfo" data-version="1.4.7"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
+            <li>v1.4.7:<br />- Added safety feature to prevent data loss when you make changes to a table and haven't downloaded the csv yet.</li><br />
             <li>v1.4.6:<br />- Added redo function (ctrl+y or ctrl+shift+z).</li><br />
-            <li>v1.4.5:<br />- Fixed bug with error handler.<br />- Significantly improved displaying of errors that are found with both Hostname and IP Validation.<br/>- Added enhanced undo function.</li><br />
+            <li>v1.4.5:<br />- Improved bug with error handler.<br />- Significantly improved displaying of errors that are found with both Hostname and IP Validation.<br/>- Added enhanced undo function.</li><br />
             <li>v1.4.4:<br />- Added Changelog Display</li><br />
             <li>v1.4.3:<br />- Added version display and changelog</li><br />
             <li>v1.4.2:<br />- Improved error handling</li><br />
@@ -182,19 +180,19 @@
     <h2 id="addHeading">Add Actions</h2>
     <div id="addErrorSection" class="error-section" style="display: none;"></div>
     <table id="addTable"></table>
-    <button onclick="downloadCSV('add')">Download Add CSV</button>
+    <button id="addDownloadButton" onclick="downloadCSV('add')">Download Add CSV</button>
 	
     <hr />
     <h2 id="removeHeading">Remove Actions</h2>
     <div id="removeErrorSection" class="error-section" style="display: none;"></div>
     <table id="removeTable"></table>
-    <button onclick="downloadCSV('remove')">Download Remove CSV</button>
+    <button id="removeDownloadButton" onclick="downloadCSV('remove')">Download Remove CSV</button>
 	
     <hr />
     <h2 id="changeHeading">Change Actions</h2>
     <div id="changeErrorSection" class="error-section" style="display: none;"></div>
     <table id="changeTable"></table>
-    <button onclick="downloadCSV('change')">Download Change CSV</button>
+    <button id="changeDownloadButton" onclick="downloadCSV('change')">Download Change CSV</button>
 
 
     <script>
@@ -217,6 +215,21 @@
 	let changeCount = 0;
 	let errorCount = 0;
 
+
+	let hasUnsavedChanges = false;
+	
+	let tableEdited = {
+		add: false,
+		remove: false,
+		change: false
+	};
+
+	let csvDownloaded = {
+  		add: false,
+  		remove: false,
+  		change: false
+	};
+
   	const requiredColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
 
   	const dropdownOptions = {
@@ -236,8 +249,45 @@
   			console.log(`${timestamp}[${callerName}]`, ...messages);
   		}
   	}
+	
+	function stripIndent(strings, ...values) {
+		const result = strings.reduce((acc, str, i) => acc + str + (values[i] || ''), '');
+		const lines = result.split('\n');
+		const minIndent = lines.filter(l => l.trim()).reduce((min, line) => Math.min(min, line.match(/^\s*/)[0].length), Infinity);
+		return lines.map(line => line.slice(minIndent)).join('\n').trim();
+	}
 
   	function processData() {
+		if (hasUnsavedChanges) {
+			let unsavedTables = [];
+			if (tableEdited.add && !csvDownloaded.add) unsavedTables.push("Add");
+			if (tableEdited.remove && !csvDownloaded.remove) unsavedTables.push("Remove");
+			if (tableEdited.change && !csvDownloaded.change) unsavedTables.push("Change");
+			
+			const confirmMessage = stripIndent`
+				There are unsaved changes in the following tables: ${unsavedTables.join(", ")}.
+				Click OK to proceed and discard unsaved changes, or Cancel to go back and save your data.
+			`;
+			
+			const confirmProcess = confirm(confirmMessage);
+			if (!confirmProcess) {
+				return;
+			}
+		}
+
+		// Reset tracking variables
+		hasUnsavedChanges = false;
+		csvDownloaded = {
+			add: false,
+			remove: false,
+			change: false
+		};
+		tableEdited = {
+			add: false,
+			remove: false,
+			change: false
+		};
+
   		clearOldData();
 
   		logDebug("Processing data...");
@@ -376,7 +426,13 @@
   			displayTable('addTable', addData);
   			displayTable('removeTable', removeData);
   			displayTable('changeTable', changeData);
-  			hideProcessingOverlay();
+        
+			// Update all download buttons
+			updateDownloadButton('add');
+			updateDownloadButton('remove');
+			updateDownloadButton('change');
+			
+			hideProcessingOverlay();
   		}, 0);
 
   	}
@@ -625,7 +681,12 @@
   		// Update the heading
   		const headingId = `${tableId.replace('Table', 'Heading')}`;
   		const heading = document.getElementById(headingId);
-  		heading.textContent = `${tableId.replace('Table', ' Actions')} (${data.length}) ${tableErrorCount > 0 ? `| ${tableErrorCount} error${tableErrorCount > 1 ? 's' : ''}` : ''}`;
+  		const actionType = tableId.replace('Table', '');
+  		const capitalizedActionType = actionType.charAt(0).toUpperCase() + actionType.slice(1);
+  		heading.textContent = `${capitalizedActionType} Actions (${data.length}) ${tableErrorCount > 0 ? `| ${tableErrorCount} error${tableErrorCount > 1 ? 's' : ''}` : ''}`;
+
+		const action = tableId.replace('Table', '');
+		updateDownloadButton(action);
 
   		logDebug('Table display completed');
   	}
@@ -701,6 +762,12 @@
 			undoStack.shift();
 		}
 		redoStack = []; // Clear redo stack when a new action is performed
+		hasUnsavedChanges = true;
+		const action = tableId.replace('Table', '');
+		tableEdited[action] = true;
+		csvDownloaded[action] = false;
+		updateDownloadButton(action);
+		checkAllDataSaved();
 		logDebug('Change recorded:', {
 			type,
 			tableId,
@@ -712,8 +779,6 @@
 		logDebug('Undo stack:', undoStack);
 		logDebug('Redo stack:', redoStack);
 	}
-
-
 
   	function removeRow(tableId, rowIndex) {
   		let data;
@@ -998,39 +1063,95 @@
   		}
   	}
 
-  	function downloadCSV(action) {
-  		let data;
-  		if (action === 'add') {
-  			data = addData;
-  		} else if (action === 'remove') {
-  			data = removeData;
-  		} else if (action === 'change') {
-  			data = changeData;
-  		} else {
-  			console.error('Invalid action for CSV download');
-  			return;
-  		}
+	function updateDownloadButton(action) {
+		const buttonId = `${action}DownloadButton`;
+		const button = document.getElementById(buttonId);
+		if (button) {
+			let data;
+			switch(action) {
+				case 'add':
+					data = addData;
+					break;
+				case 'remove':
+					data = removeData;
+					break;
+				case 'change':
+					data = changeData;
+					break;
+				default:
+					console.error('Invalid action for updateDownloadButton');
+					return;
+			}
 
-  		const csv = [
-  			requiredColumns.join(','),
-  			...data.map(row => requiredColumns.map(key => row[key]).join(','))
-  		].join('\n');
+			if (data && data.length > 0) {
+				if (tableEdited[action]) {
+					if (csvDownloaded[action]) {
+						button.style.backgroundColor = '#4CAF50'; // Green
+						button.style.color = 'white';
+						button.textContent = `Download ${action} CSV`;
+					} else {
+						button.style.backgroundColor = '#FFC107'; // Yellow
+						button.style.color = 'black';
+						button.textContent = `Download ${action} CSV (Unsaved Changes)`;
+					}
+				} else {
+					// Data exists but hasn't been edited
+					button.style.backgroundColor = ''; // Default background
+					button.style.color = ''; // Default text color
+					button.textContent = `Download ${action} CSV`;
+				}
+			} else {
+				// Reset to default state if there's no data
+				button.style.backgroundColor = ''; // Default background
+				button.style.color = ''; // Default text color
+				button.textContent = `Download ${action} CSV`;
+			}
+		}
+	}
 
-  		const blob = new Blob([csv], {
-  			type: 'text/csv;charset=utf-8;'
-  		});
-  		const link = document.createElement("a");
-  		if (link.download !== undefined) {
-  			const url = URL.createObjectURL(blob);
-  			link.setAttribute("href", url);
-  			//link.setAttribute("download", `${action}_data.csv`);
-  			link.setAttribute("download", `raw_data_new.csv`);
-  			link.style.visibility = 'hidden';
-  			document.body.appendChild(link);
-  			link.click();
-  			document.body.removeChild(link);
-  		}
-  	}
+	function downloadCSV(action) {
+		let data;
+		if (action === 'add') {
+			data = addData;
+		} else if (action === 'remove') {
+			data = removeData;
+		} else if (action === 'change') {
+			data = changeData;
+		} else {
+			console.error('Invalid action for CSV download');
+			return;
+		}
+
+		const csv = [
+			requiredColumns.join(','),
+			...data.map(row => requiredColumns.map(key => row[key]).join(','))
+		].join('\n');
+
+		const blob = new Blob([csv], {
+			type: 'text/csv;charset=utf-8;'
+		});
+		const link = document.createElement("a");
+		if (link.download !== undefined) {
+			const url = URL.createObjectURL(blob);
+			link.setAttribute("href", url);
+			link.setAttribute("download", `raw_data_new.csv`);
+			link.style.visibility = 'hidden';
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+		}
+
+		csvDownloaded[action] = true;
+		tableEdited[action] = false; // Reset the edited flag after download
+		updateDownloadButton(action);
+		checkAllDataSaved();
+	}
+
+	function checkAllDataSaved() {
+		hasUnsavedChanges = (tableEdited.add && !csvDownloaded.add) ||
+							(tableEdited.remove && !csvDownloaded.remove) ||
+							(tableEdited.change && !csvDownloaded.change);
+	}
 
   	function guessOSType(row) {
   		const deviceClass = row['lvs.igdeviceclass'].toLowerCase();
@@ -1179,7 +1300,14 @@
   		// Add the global keydown event listener here
   		document.addEventListener('keydown', handleGlobalKeydown);
   	});
-	
+
+	window.addEventListener('beforeunload', function (e) {
+		if (hasUnsavedChanges) {
+			e.preventDefault();
+			e.returnValue = '';
+		}
+	});
+
     </script>
 </body>
 </html>
