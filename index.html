@@ -141,10 +141,11 @@
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.5.1"></div>
+    <div id="versionInfo" data-version="1.5.2"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
+            <li>v1.5.2:<br />- James mode!</li><br />
             <li>v1.5.1:<br />- Fixed some UTF-8 related issues with certain characters.<br />- Fixed bug with data being cleared from the 'dropdown' cells where you manually entered data.</li><br />
             <li>v1.5.0:<br />- Revamped tables to lock key info columns while scrolling in addition to a sticky header.<br />- Fixed bug with Scrolling to Error line<br />- Fixed bug with any cells containing commas which would offset the rest of that line.</li><br />
 			<li>v1.4.9:<br />- Slight styling tweaks.</li><br />
@@ -172,6 +173,9 @@
         <label for="dtcModelTo"> To:</label>
         <input type="text" id="dtcModelTo" value="2022">
         <br/><br />
+		<label for="jamesMode">James Mode:</label>
+		<input type="checkbox" id="jamesMode">
+		<br />
         <label for="allowBlankIP">Allow empty lvs.hostname:</label>
         <input type="checkbox" id="allowBlankIP" checked>
 		<br />
@@ -235,7 +239,8 @@
 	let changeCount = 0;
 	let errorCount = 0;
 
-
+	let jamesMode = false;
+	
 	let hasUnsavedChanges = false;
 	
 	let tableEdited = {
@@ -250,7 +255,11 @@
   		change: false
 	};
 
-  	const requiredColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igsdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
+	const defaultColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igsdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
+
+	const jamesColumns = ['public_Name', 'lvs.allocationcentre', 'lvs.assetfunction', 'lvs.assetlocation', 'lvs.blockrules', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.dtcmodel', 'lvs.igsbackup', 'lvs.igsdeviceclass', 'lvs.igsteam', 'lvs.managedassetexport', 'lvs.managedservicelevel', 'lvs.nocdeviceclass', 'lvs.ostype', 'lvs.patchgroup', 'lvs.patching', 'lvs.pcipurpose', 'lvs.pcirole', 'lvs.profitandlosscode', 'lvs.projectcode_from', 'lvs.projectcode_to', 'lvs.supporthours', 'lvs.supportlevel', 'lvs.crmname', 'lvs.crmnumber', 'lvs.sitename'];
+
+	let requiredColumns = defaultColumns;
 
   	const dropdownOptions = {
   		'lvs.igsservicetower': ['Citrix', 'Cloud', 'Database', 'Internal Systems', 'Linux', 'Messaging', 'Network', 'Network Voice', 'NOC', 'Server', 'Storage & Backup', 'Virtualization', 'Windows'],
@@ -574,172 +583,174 @@
   		return invalidTerms.includes(hostname.trim().toLowerCase()) || hostname.trim() === '';
   	}
 
+	function displayTable(tableId, data) {
+	    logDebug(`Starting displayTable function for ${tableId}`);
+	    const container = document.getElementById(tableId);
+	    container.innerHTML = ''; // Clear existing content
+	    container.className = 'table-container';
+	
+	    // Create wrapper for both tables
+	    const wrapper = document.createElement('div');
+	    wrapper.className = 'table-wrapper';
+	    container.appendChild(wrapper);
+	
+	    // Create frozen columns table
+	    const frozenTable = document.createElement('table');
+	    frozenTable.className = 'data-table frozen-table';
+	    wrapper.appendChild(frozenTable);
+	
+	    // Create scrollable columns table
+	    const scrollableTable = document.createElement('table');
+	    scrollableTable.className = 'data-table scrollable-table';
+	    wrapper.appendChild(scrollableTable);
+	
+		// Create header rows
+	    createTableHeader(frozenTable, jamesMode ? ['#', '', 'Status', 'public_Name'] : ['#', '', 'Status', 'public_Name', 'lvs.hostname'], true);
+	    createTableHeader(scrollableTable, jamesMode ? requiredColumns.slice(1) : requiredColumns.slice(2), false);
+	
+	
+	    // Create table bodies
+	    const frozenBody = frozenTable.createTBody();
+	    const scrollableBody = scrollableTable.createTBody();
+	
+	    let tableErrorCount = 0;
+	
+	    // Create data rows
+	    data.forEach((row, rowIndex) => {
+	        // Determine if this row has errors
+	        const isIPValid = isValidIP(row['lvs.hostname']);
+	        const isNameValid = !isInvalidHostname(row['public_Name']);
+	        const errorReasons = [];
+	
+	        if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
+	            errorReasons.push('Invalid IP Address');
+	        }
+	        if (!isNameValid) {
+	            errorReasons.push('Invalid Hostname');
+	        }
+	
+	        row.isError = errorReasons.length > 0;
+	        row.errorReasons = errorReasons;
+	
+	        if (row.isError) {
+	            tableErrorCount++;
+	        }
+	
+	        createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId);
+	    });
+	
+	    // Synchronize scroll
+	    synchronizeScroll(frozenBody, scrollableBody);
+	
+	    // Update error section
+	    updateErrorSection(tableId, data, tableErrorCount);
+	
+	    // Update the heading
+	    //updateTableHeading(tableId, data, tableErrorCount);
+	
+	    const action = tableId.replace('Table', '');
+	    updateDownloadButton(action);
+	
+	    logDebug(`Finished displayTable function for ${tableId}. Error count: ${tableErrorCount}`);
+	}
+	
+	function createTableHeader(table, headers, isLeftTable) {
+	    const thead = table.createTHead();
+	    const headerRow = thead.insertRow();
+	    headerRow.className = isLeftTable ? 'sticky-header-l' : 'sticky-header-r';
+	    headers.forEach(header => {
+	        const th = document.createElement('th');
+	        th.textContent = header;
+	        headerRow.appendChild(th);
+	    });
+	}
 
-function displayTable(tableId, data) {
-    logDebug(`Starting displayTable function for ${tableId}`);
-    const container = document.getElementById(tableId);
-    container.innerHTML = ''; // Clear existing content
-    container.className = 'table-container';
+	function createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId) {
+	    const frozenRow = frozenBody.insertRow();
+	    const scrollableRow = scrollableBody.insertRow();
+	    
+	    frozenRow.id = `${tableId}-row-${rowIndex}-frozen`;
+	    scrollableRow.id = `${tableId}-row-${rowIndex}-scrollable`;
+	
+	    if (row.isError) {
+	        frozenRow.classList.add('error-row');
+	        scrollableRow.classList.add('error-row');
+	    }
+	
+	    // Add cells to frozen row
+	    addLineNumberCell(frozenRow, rowIndex);
+	    addTrashIconCell(frozenRow, row, rowIndex, tableId);
+	    addStatusCell(frozenRow, row);
+	    addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId);
+	    if (!jamesMode) {
+	        addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
+	    }
+	
+	    // Modify the cells added to scrollable row
+	    const columnsToAdd = jamesMode ? requiredColumns.slice(1) : requiredColumns.slice(2);
+	    columnsToAdd.forEach((key, colIndex) => {
+	        if (tableId === 'addTable' && key in dropdownOptions) {
+	            createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
+	        } else {
+	            addEditableCell(scrollableRow, row, key, rowIndex, colIndex + (jamesMode ? 4 : 5), tableId);
+	        }
+	    });
+	}
 
-    // Create wrapper for both tables
-    const wrapper = document.createElement('div');
-    wrapper.className = 'table-wrapper';
-    container.appendChild(wrapper);
-
-    // Create frozen columns table
-    const frozenTable = document.createElement('table');
-    frozenTable.className = 'data-table frozen-table';
-    wrapper.appendChild(frozenTable);
-
-    // Create scrollable columns table
-    const scrollableTable = document.createElement('table');
-    scrollableTable.className = 'data-table scrollable-table';
-    wrapper.appendChild(scrollableTable);
-
-	// Create header rows
-	createTableHeader(frozenTable, ['#', '', 'Status', 'public_Name', 'lvs.hostname'], true);
-	createTableHeader(scrollableTable, requiredColumns.slice(2), false);
-
-
-    // Create table bodies
-    const frozenBody = frozenTable.createTBody();
-    const scrollableBody = scrollableTable.createTBody();
-
-    let tableErrorCount = 0;
-
-    // Create data rows
-    data.forEach((row, rowIndex) => {
-        // Determine if this row has errors
-        const isIPValid = isValidIP(row['lvs.hostname']);
-        const isNameValid = !isInvalidHostname(row['public_Name']);
-        const errorReasons = [];
-
-        if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
-            errorReasons.push('Invalid IP Address');
-        }
-        if (!isNameValid) {
-            errorReasons.push('Invalid Hostname');
-        }
-
-        row.isError = errorReasons.length > 0;
-        row.errorReasons = errorReasons;
-
-        if (row.isError) {
-            tableErrorCount++;
-        }
-
-        createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId);
-    });
-
-    // Synchronize scroll
-    synchronizeScroll(frozenBody, scrollableBody);
-
-    // Update error section
-    updateErrorSection(tableId, data, tableErrorCount);
-
-    // Update the heading
-    //updateTableHeading(tableId, data, tableErrorCount);
-
-    const action = tableId.replace('Table', '');
-    updateDownloadButton(action);
-
-    logDebug(`Finished displayTable function for ${tableId}. Error count: ${tableErrorCount}`);
-}
-
-function createTableHeader(table, headers, isLeftTable) {
-    const thead = table.createTHead();
-    const headerRow = thead.insertRow();
-    headerRow.className = isLeftTable ? 'sticky-header-l' : 'sticky-header-r';
-    headers.forEach(header => {
-        const th = document.createElement('th');
-        th.textContent = header;
-        headerRow.appendChild(th);
-    });
-}
-
-function createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId) {
-    const frozenRow = frozenBody.insertRow();
-    const scrollableRow = scrollableBody.insertRow();
-    
-    frozenRow.id = `${tableId}-row-${rowIndex}-frozen`;
-    scrollableRow.id = `${tableId}-row-${rowIndex}-scrollable`;
-
-    if (row.isError) {
-        frozenRow.classList.add('error-row');
-        scrollableRow.classList.add('error-row');
-    }
-
-    // Add cells to frozen row
-    addLineNumberCell(frozenRow, rowIndex);
-    addTrashIconCell(frozenRow, row, rowIndex, tableId);
-    addStatusCell(frozenRow, row);
-    addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId);
-    addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
-
-    // Add cells to scrollable row
-    requiredColumns.slice(2).forEach((key, colIndex) => {
-        if (tableId === 'addTable' && key in dropdownOptions) {
-            createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
-        } else {
-            addEditableCell(scrollableRow, row, key, rowIndex, colIndex + 5, tableId);
-        }
-    });
-}
-
-function synchronizeScroll(frozenBody, scrollableBody) {
-    const container = scrollableBody.closest('.table-container');
-    container.addEventListener('scroll', function() {
-        frozenBody.style.transform = `translateY(-${this.scrollTop}px)`;
-    });
-}
-
-function scrollToRow(tableId, rowIndex) {
-    logDebug(`Attempting to scroll to row ${rowIndex} in table ${tableId}`);
-    
-    // Scroll the main window up by 1 pixel
-    window.scrollBy(0, -1);
-    
-    setTimeout(() => {
-        const container = document.querySelector(`#${tableId}`);
-        logDebug(`Container found: ${!!container}`);
-        
-        const frozenRow = container.querySelector(`.frozen-table tbody tr:nth-child(${rowIndex + 1})`);
-        logDebug(`Frozen row found: ${!!frozenRow}`);
-        
-        const scrollableRow = container.querySelector(`.scrollable-table tbody tr:nth-child(${rowIndex + 1})`);
-        logDebug(`Scrollable row found: ${!!scrollableRow}`);
-
-        if (frozenRow && scrollableRow && container) {
-            // Force a reflow
-            void container.offsetHeight;
-
-            // Scroll to the row
-            frozenRow.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center',
-                inline: 'nearest'
-            });
-            logDebug('Scrolled to row');
-            
-            // Highlight the row temporarily
-            frozenRow.style.transition = 'background-color 0.5s';
-            scrollableRow.style.transition = 'background-color 0.5s';
-            frozenRow.style.backgroundColor = '#ffffa0';
-            scrollableRow.style.backgroundColor = '#ffffa0';
-            setTimeout(() => {
-                frozenRow.style.backgroundColor = '';
-                scrollableRow.style.backgroundColor = '';
-                setTimeout(() => {
-                    frozenRow.style.transition = '';
-                    scrollableRow.style.transition = '';
-                }, 500);
-            }, 1500);
-            logDebug('Row highlighting applied');
-        } else {
-            logDebug('Failed to find necessary elements for scrolling');
-        }
-    }, 50); // Small delay to ensure DOM is updated
-}
+	function synchronizeScroll(frozenBody, scrollableBody) {
+	    const container = scrollableBody.closest('.table-container');
+	    container.addEventListener('scroll', function() {
+	        frozenBody.style.transform = `translateY(-${this.scrollTop}px)`;
+	    });
+	}
+	
+	function scrollToRow(tableId, rowIndex) {
+	    logDebug(`Attempting to scroll to row ${rowIndex} in table ${tableId}`);
+	    
+	    // Scroll the main window up by 1 pixel
+	    window.scrollBy(0, -1);
+	    
+	    setTimeout(() => {
+	        const container = document.querySelector(`#${tableId}`);
+	        logDebug(`Container found: ${!!container}`);
+	        
+	        const frozenRow = container.querySelector(`.frozen-table tbody tr:nth-child(${rowIndex + 1})`);
+	        logDebug(`Frozen row found: ${!!frozenRow}`);
+	        
+	        const scrollableRow = container.querySelector(`.scrollable-table tbody tr:nth-child(${rowIndex + 1})`);
+	        logDebug(`Scrollable row found: ${!!scrollableRow}`);
+	
+	        if (frozenRow && scrollableRow && container) {
+	            // Force a reflow
+	            void container.offsetHeight;
+	
+	            // Scroll to the row
+	            frozenRow.scrollIntoView({
+	                behavior: 'smooth',
+	                block: 'center',
+	                inline: 'nearest'
+	            });
+	            logDebug('Scrolled to row');
+	            
+	            // Highlight the row temporarily
+	            frozenRow.style.transition = 'background-color 0.5s';
+	            scrollableRow.style.transition = 'background-color 0.5s';
+	            frozenRow.style.backgroundColor = '#ffffa0';
+	            scrollableRow.style.backgroundColor = '#ffffa0';
+	            setTimeout(() => {
+	                frozenRow.style.backgroundColor = '';
+	                scrollableRow.style.backgroundColor = '';
+	                setTimeout(() => {
+	                    frozenRow.style.transition = '';
+	                    scrollableRow.style.transition = '';
+	                }, 500);
+	            }, 1500);
+	            logDebug('Row highlighting applied');
+	        } else {
+	            logDebug('Failed to find necessary elements for scrolling');
+	        }
+	    }, 50); // Small delay to ensure DOM is updated
+	}
 
 	function addLineNumberCell(row, rowIndex) {
 		const cell = row.insertCell();
@@ -766,33 +777,33 @@ function scrollToRow(tableId, rowIndex) {
 		cell.appendChild(statusBadge);
 	}
 
-	function addEditableCell(row, dataRow, key, rowIndex, colIndex, tableId) {
-		const cell = row.insertCell();
-		cell.contentEditable = true;
-		cell.className = 'editable';
-
-		if (key === 'public_Name') {
-			cell.classList.add('public-name');
-			if (isInvalidHostname(dataRow[key])) {
-				cell.classList.add('invalid-name');
-			}
-			cell.textContent = dataRow[key]; // Ensure the public_Name is displayed
-		} else if (key === 'lvs.hostname') {
-			const cleanedIP = dataRow[key].trim().replace(/[^\d.]/g, '');
-			if (!isValidIP(cleanedIP) && !(allow_blank_ip && cleanedIP === '')) {
-				cell.classList.add('invalid-ip');
-			}
-			cell.textContent = cleanedIP;
-			dataRow[key] = cleanedIP; // Update the data array with the cleaned IP
-		} else {
-			cell.textContent = dataRow[key];
-		}
-
-		cell.dataset.row = rowIndex;
-		cell.dataset.col = colIndex;
-		cell.dataset.key = key;
-		cell.addEventListener('keydown', handleCellKeyDown);
-		cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key));
+	function addEditableCell(rowElement, dataRow, key, rowIndex, colIndex, tableId) {
+	    const cell = rowElement.insertCell();
+	    cell.contentEditable = true;
+	    cell.className = 'editable';
+	
+	    if (key === 'public_Name') {
+	        cell.classList.add('public-name');
+	        if (isInvalidHostname(dataRow[key])) {
+	            cell.classList.add('invalid-name');
+	        }
+	        cell.textContent = dataRow[key]; // Ensure the public_Name is displayed
+	    } else if (key === 'lvs.hostname') {
+	        const cleanedIP = dataRow[key].trim().replace(/[^\d.]/g, '');
+	        if (!isValidIP(cleanedIP) && !(allow_blank_ip && cleanedIP === '')) {
+	            cell.classList.add('invalid-ip');
+	        }
+	        cell.textContent = cleanedIP;
+	        dataRow[key] = cleanedIP; // Update the data array with the cleaned IP
+	    } else {
+	        cell.textContent = dataRow[key];
+	    }
+	
+	    cell.dataset.row = rowIndex;
+	    cell.dataset.col = colIndex;
+	    cell.dataset.key = key;
+	    cell.addEventListener('keydown', handleCellKeyDown);
+	    cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key));
 	}
 
 	function handleCellBlur(event, tableId, rowIndex, key) {
@@ -1456,6 +1467,27 @@ function scrollToRow(tableId, rowIndex) {
   		return ''; // If we can't make a confident guess, return an empty string
   	}
 
+	function setCookie(name, value, days) {
+	    let expires = "";
+	    if (days) {
+	        const date = new Date();
+	        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+	        expires = "; expires=" + date.toUTCString();
+	    }
+	    document.cookie = name + "=" + value + expires + "; path=/";
+	}
+	
+	function getCookie(name) {
+	    const nameEQ = name + "=";
+	    const ca = document.cookie.split(';');
+	    for(let i = 0; i < ca.length; i++) {
+	        let c = ca[i];
+	        while (c.charAt(0) === ' ') c = c.substring(1);
+	        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+	    }
+	    return null;
+	}
+
   	// Version checking functionality
   	const currentVersion = document.getElementById('versionInfo').dataset.version;
 
@@ -1487,6 +1519,13 @@ function scrollToRow(tableId, rowIndex) {
   			.catch(error => console.error('Error checking for updates:', error));
   	}
 
+	function toggleJamesMode() {
+		jamesMode = document.getElementById('jamesMode').checked;
+		requiredColumns = jamesMode ? jamesColumns : defaultColumns;
+		setCookie('jamesMode', jamesMode ? 'true' : 'false', 30);  // Store preference for 30 days
+		processData();  // Reprocess and redisplay the data
+	}
+
   	// Check for updates every 10 minutes
   	setInterval(checkForUpdates, 10 * 60 * 1000);
 
@@ -1510,13 +1549,23 @@ function scrollToRow(tableId, rowIndex) {
 	}
 
   	// Initialize the checkbox state
-  	document.addEventListener('DOMContentLoaded', function() {
-  		document.getElementById('allowBlankIP').checked = allow_blank_ip;
-  		logDebug('DOM content loaded, allowBlankIP set to', allow_blank_ip);
+	document.addEventListener('DOMContentLoaded', function() {
+		document.getElementById('allowBlankIP').checked = allow_blank_ip;
+		logDebug('DOM content loaded, allowBlankIP set to', allow_blank_ip);
 
-  		// Add the global keydown event listener here
-  		document.addEventListener('keydown', handleGlobalKeydown);
-  	});
+		// Set up James Mode
+		const savedJamesMode = getCookie('jamesMode');
+		if (savedJamesMode !== null) {
+			jamesMode = savedJamesMode === 'true';
+			document.getElementById('jamesMode').checked = jamesMode;
+			requiredColumns = jamesMode ? jamesColumns : defaultColumns;
+		}
+		document.getElementById('jamesMode').addEventListener('change', toggleJamesMode);
+
+		// Add the global keydown event listener here
+		document.addEventListener('keydown', handleGlobalKeydown);
+	});
+
 
 	window.addEventListener('beforeunload', function (e) {
 		if (hasUnsavedChanges) {
