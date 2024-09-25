@@ -257,7 +257,7 @@
 
 	const defaultColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igsdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
 
-	const jamesColumns = ['public_Name', 'lvs.allocationcentre', 'lvs.assetfunction', 'lvs.assetlocation', 'lvs.blockrules', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.dtcmodel', 'lvs.igsbackup', 'lvs.igsdeviceclass', 'lvs.igsteam', 'lvs.managedassetexport', 'lvs.managedservicelevel', 'lvs.nocdeviceclass', 'lvs.ostype', 'lvs.patchgroup', 'lvs.patching', 'lvs.pcipurpose', 'lvs.pcirole', 'lvs.profitandlosscode', 'lvs.projectcode_from', 'lvs.projectcode_to', 'lvs.supporthours', 'lvs.supportlevel', 'lvs.crmname', 'lvs.crmnumber', 'lvs.sitename'];
+	const jamesColumns = ['public_Name', 'lvs.hostname', 'lvs.allocationcentre', 'lvs.assetfunction', 'lvs.assetlocation', 'lvs.blockrules', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.dtcmodel', 'lvs.igsbackup', 'lvs.igsdeviceclass', 'lvs.igsteam', 'lvs.managedassetexport', 'lvs.managedservicelevel', 'lvs.nocdeviceclass', 'lvs.ostype', 'lvs.patchgroup', 'lvs.patching', 'lvs.pcipurpose', 'lvs.pcirole', 'lvs.profitandlosscode', 'lvs.projectcode_from', 'lvs.projectcode_to', 'lvs.supporthours', 'lvs.supportlevel', 'lvs.crmname', 'lvs.crmnumber', 'lvs.sitename'];
 
 	let requiredColumns = defaultColumns;
 
@@ -386,11 +386,11 @@
   				return;
   			}
 
-  			const row = {};
-  			requiredColumns.forEach(col => row[col] = '');
+			const row = {};
+			(jamesMode ? jamesColumns : requiredColumns).forEach(col => row[col] = '');
 
-  			row['public_Name'] = (values[findColumnIndex(headers, ['hostname'])] || '').toUpperCase();
-  			row['lvs.hostname'] = values[findColumnIndex(headers, ['ip address', 'ipaddress', 'ip'])] || '';
+			row['public_Name'] = (values[findColumnIndex(headers, ['hostname'])] || '').toUpperCase();
+			row['lvs.hostname'] = values[findColumnIndex(headers, ['ip address', 'ipaddress', 'ip'])] || '';
   			row['lvs.assetfunction'] = values[findColumnIndex(headers, ['function'])] || '';
   			row['lvs.supporthours'] = values[findColumnIndex(headers, ['support hours', 'supporthours'])] || '';
   			row['lvs.assetlocation'] = values[findColumnIndex(headers, ['location'])] || '';
@@ -605,8 +605,8 @@
 	    wrapper.appendChild(scrollableTable);
 	
 		// Create header rows
-	    createTableHeader(frozenTable, jamesMode ? ['#', '', 'Status', 'public_Name'] : ['#', '', 'Status', 'public_Name', 'lvs.hostname'], true);
-	    createTableHeader(scrollableTable, jamesMode ? requiredColumns.slice(1) : requiredColumns.slice(2), false);
+		createTableHeader(frozenTable, ['#', '', 'Status', 'public_Name', 'lvs.hostname'], true);
+		createTableHeader(scrollableTable, jamesMode ? jamesColumns.slice(2) : requiredColumns.slice(2), false);
 	
 	
 	    // Create table bodies
@@ -666,35 +666,33 @@
 	}
 
 	function createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId) {
-	    const frozenRow = frozenBody.insertRow();
-	    const scrollableRow = scrollableBody.insertRow();
-	    
-	    frozenRow.id = `${tableId}-row-${rowIndex}-frozen`;
-	    scrollableRow.id = `${tableId}-row-${rowIndex}-scrollable`;
-	
-	    if (row.isError) {
-	        frozenRow.classList.add('error-row');
-	        scrollableRow.classList.add('error-row');
-	    }
-	
-	    // Add cells to frozen row
-	    addLineNumberCell(frozenRow, rowIndex);
-	    addTrashIconCell(frozenRow, row, rowIndex, tableId);
-	    addStatusCell(frozenRow, row);
-	    addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId);
-	    if (!jamesMode) {
-	        addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
-	    }
-	
-	    // Modify the cells added to scrollable row
-	    const columnsToAdd = jamesMode ? requiredColumns.slice(1) : requiredColumns.slice(2);
-	    columnsToAdd.forEach((key, colIndex) => {
-	        if (tableId === 'addTable' && key in dropdownOptions) {
-	            createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
-	        } else {
-	            addEditableCell(scrollableRow, row, key, rowIndex, colIndex + (jamesMode ? 4 : 5), tableId);
-	        }
-	    });
+		const frozenRow = frozenBody.insertRow();
+		const scrollableRow = scrollableBody.insertRow();
+		
+		frozenRow.id = `${tableId}-row-${rowIndex}-frozen`;
+		scrollableRow.id = `${tableId}-row-${rowIndex}-scrollable`;
+
+		if (row.isError) {
+			frozenRow.classList.add('error-row');
+			scrollableRow.classList.add('error-row');
+		}
+
+		// Add cells to frozen row
+		addLineNumberCell(frozenRow, rowIndex);
+		addTrashIconCell(frozenRow, row, rowIndex, tableId);
+		addStatusCell(frozenRow, row);
+		addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId);
+		addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
+
+		// Modify the cells added to scrollable row
+		const columnsToAdd = jamesMode ? jamesColumns.slice(2) : requiredColumns.slice(2);
+		columnsToAdd.forEach((key, colIndex) => {
+			if (tableId === 'addTable' && key in dropdownOptions) {
+				createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
+			} else {
+				addEditableCell(scrollableRow, row, key, rowIndex, colIndex + 5, tableId);
+			}
+		});
 	}
 
 	function synchronizeScroll(frozenBody, scrollableBody) {
