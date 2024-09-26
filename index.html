@@ -21,6 +21,7 @@
 			border: 1px solid #ddd; padding: 8px; white-space: nowrap;
 			overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;
 		}
+		
 		.frozen-table, .scrollable-table { border-collapse: separate; border-spacing: 0; }
 		.frozen-table {
 			position: sticky; left: 0; z-index: 5; background-color: #fff;
@@ -29,6 +30,7 @@
 			content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 2px;
 			background-color: #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.1);
 		}
+		
 		.scrollable-table { flex: 1; z-index: 2; min-width: max-content; }
 		.frozen-table tr, .scrollable-table tr { height: 41px; }
 		.frozen-table td, .scrollable-table td { height: 100%; }
@@ -65,17 +67,67 @@
 
 		/* Status Styles */
 		.status-badge {
-			font-size: 0.8em; padding: 2px 5px; border-radius: 3px; color: white;
+			font-size: 0.8em;
+			padding: 2px 5px;
+			border-radius: 3px;
+			color: white;
 		}
 		.status-valid { background-color: #4CAF50; }
 		.status-error { background-color: #F44336; }
+		.status-removed { background-color: #F44336; }
 
 		/* Misc Styles */
-		.public-name { max-width: 200px; }
+		.public-name {
+			position: relative;
+			min-width: 250px; /* Increase the minimum width */
+			max-width: 500px; /* Increase the maximum width */
+		}
+		.public-name:hover::after {
+			content: attr(title);
+			position: absolute;
+			left: 0;
+			top: 100%;
+			white-space: nowrap;
+			background: #f0f0f0;
+			padding: 5px;
+			border: 1px solid #ccc;
+			border-radius: 3px;
+			z-index: 1000;
+		}
 		.line-number { width: 30px; text-align: right; color: #888; padding-right: 10px; }
 		.trash-icon { cursor: pointer; }
 		.see-all {
 			font-size: 0.8em; color: #666; font-style: italic; background-color: #e9e9e9;
+		}
+		
+		#removeTable {
+			table-layout: auto; width: auto; max-width: none;
+		}
+		#removeTable .table-wrapper {
+			display: inline-flex; min-width: auto; width: auto; max-width: 100%;
+		}
+		#removeTable .table-container {
+			width: auto; overflow-x: auto; max-width: 100%;
+		}
+		#removeTable .frozen-table,
+		#removeTable .scrollable-table { width: auto; }
+		#removeTable th,
+		#removeTable td { white-space: nowrap; }
+		#removeTable .frozen-table::after { display: none; }
+		#removeTable .line-number { width: 30px; }
+		#removeTable .checkbox-column { width: 30px; }
+		#removeTable .status-column { width: 80px; }
+		#removeTable .public-name {
+			min-width: 350px; max-width: 800px; width: auto;
+		}
+		#removeTable .lvs-hostname { width: 120px; }
+		#removeTable .lvs-assetfunction,
+		#removeTable .lvs-assetlocation {
+			min-width: 150px;
+			max-width: 300px;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
 		}
 
 		/* Dropdown Styles */
@@ -141,10 +193,11 @@
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.5.2"></div>
+    <div id="versionInfo" data-version="1.5.3"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
+            <li>v1.5.3:<br />- Made some tweaks to cell sizes, increased public_Name to accomodate larger hostnames (while also providing a hover function for those that are super long)<br />- Removed unneccesary columns from the Remove table<br />- Added a checkbox function to the Remove Table to keep track of removals as you work through them.</li><br />
             <li>v1.5.2:<br />- James mode!</li><br />
             <li>v1.5.1:<br />- Fixed some UTF-8 related issues with certain characters.<br />- Fixed bug with data being cleared from the 'dropdown' cells where you manually entered data.</li><br />
             <li>v1.5.0:<br />- Revamped tables to lock key info columns while scrolling in addition to a sticky header.<br />- Fixed bug with Scrolling to Error line<br />- Fixed bug with any cells containing commas which would offset the rest of that line.</li><br />
@@ -239,6 +292,8 @@
 	let changeCount = 0;
 	let errorCount = 0;
 
+	let removeCheckedRows = new Set();
+
 	let jamesMode = false;
 	
 	let hasUnsavedChanges = false;
@@ -317,6 +372,7 @@
 			change: false
 		};
 
+		removeCheckedRows.clear();
 		clearOldData();
 
 		logDebug("Processing data...");
@@ -391,24 +447,26 @@
 
 			row['public_Name'] = (values[findColumnIndex(headers, ['hostname'])] || '').toUpperCase();
 			row['lvs.hostname'] = values[findColumnIndex(headers, ['ip address', 'ipaddress', 'ip'])] || '';
-  			row['lvs.assetfunction'] = values[findColumnIndex(headers, ['function'])] || '';
-  			row['lvs.supporthours'] = values[findColumnIndex(headers, ['support hours', 'supporthours'])] || '';
-  			row['lvs.assetlocation'] = values[findColumnIndex(headers, ['location'])] || '';
-  			row['lvs.managedservicelevel'] = values[findColumnIndex(headers, ['managed service level', 'managedservicelevel'])] || '';
-  			row['lvs.supportlevel'] = values[findColumnIndex(headers, ['support level', 'supportlevel'])] || '';
-  			row['lvs.confidentialityclass'] = values[findColumnIndex(headers, ['confidentiality class', 'confidentialityclass'])] || '';
-  			row['lvs.deviceplatform'] = values[findColumnIndex(headers, ['platform'])] || '';
-  			row['lvs.igsdeviceclass'] = values[findColumnIndex(headers, ['igs device class', 'igsdeviceclass'])] || '';
-  			row['lvs.igsservicetower'] = values[findColumnIndex(headers, ['igs service tower', 'igsservicetower'])] || '';
-  			row['lvs.ostype'] = values[findColumnIndex(headers, ['os type', 'ostype'])] || '';
-  			row['lvs.igsbackup'] = values[findColumnIndex(headers, ['igs backup', 'igsbackup'])] || '';
-  			row['lvs.patching'] = values[findColumnIndex(headers, ['patching'])] || '';
-  			let dtcModelIndex = findColumnIndex(headers, ['dtc model', 'dtcmodel']);
-  			row['lvs.dtcmodel'] = dtcModelIndex !== -1 && values[dtcModelIndex]?.includes(dtcModelFrom) ? dtcModelTo : '';
-  			row['lvs.nocdeviceclass'] = values[findColumnIndex(headers, ['managed service level', 'managedservicelevel'])] || '';
+			row['lvs.assetfunction'] = values[findColumnIndex(headers, ['function'])] || '';
+			row['lvs.assetlocation'] = values[findColumnIndex(headers, ['location'])] || '';
 
   			// Guess OS type and IGS Service Tower only for add and change actions
   			if (action === 'add' || action === 'change') {
+				
+				row['lvs.supporthours'] = values[findColumnIndex(headers, ['support hours', 'supporthours'])] || '';
+				row['lvs.managedservicelevel'] = values[findColumnIndex(headers, ['managed service level', 'managedservicelevel'])] || '';
+				row['lvs.supportlevel'] = values[findColumnIndex(headers, ['support level', 'supportlevel'])] || '';
+				row['lvs.confidentialityclass'] = values[findColumnIndex(headers, ['confidentiality class', 'confidentialityclass'])] || '';
+				row['lvs.deviceplatform'] = values[findColumnIndex(headers, ['platform'])] || '';
+				row['lvs.igsdeviceclass'] = values[findColumnIndex(headers, ['igs device class', 'igsdeviceclass'])] || '';
+				row['lvs.igsservicetower'] = values[findColumnIndex(headers, ['igs service tower', 'igsservicetower'])] || '';
+				row['lvs.ostype'] = values[findColumnIndex(headers, ['os type', 'ostype'])] || '';
+				row['lvs.igsbackup'] = values[findColumnIndex(headers, ['igs backup', 'igsbackup'])] || '';
+				row['lvs.patching'] = values[findColumnIndex(headers, ['patching'])] || '';
+				let dtcModelIndex = findColumnIndex(headers, ['dtc model', 'dtcmodel']);
+				row['lvs.dtcmodel'] = dtcModelIndex !== -1 && values[dtcModelIndex]?.includes(dtcModelFrom) ? dtcModelTo : '';
+				row['lvs.nocdeviceclass'] = values[findColumnIndex(headers, ['managed service level', 'managedservicelevel'])] || '';
+			
   				// Guess OS type based on other fields
   				if (ostypeGuess && !row['lvs.ostype']) {
   					row['lvs.ostype'] = guessOSType(row);
@@ -584,86 +642,103 @@
   	}
 
 	function displayTable(tableId, data) {
-	    logDebug(`Starting displayTable function for ${tableId}`);
-	    const container = document.getElementById(tableId);
-	    container.innerHTML = ''; // Clear existing content
-	    container.className = 'table-container';
-	
-	    // Create wrapper for both tables
-	    const wrapper = document.createElement('div');
-	    wrapper.className = 'table-wrapper';
-	    container.appendChild(wrapper);
-	
-	    // Create frozen columns table
-	    const frozenTable = document.createElement('table');
-	    frozenTable.className = 'data-table frozen-table';
-	    wrapper.appendChild(frozenTable);
-	
-	    // Create scrollable columns table
-	    const scrollableTable = document.createElement('table');
-	    scrollableTable.className = 'data-table scrollable-table';
-	    wrapper.appendChild(scrollableTable);
-	
+		logDebug(`Starting displayTable function for ${tableId}`);
+		const container = document.getElementById(tableId);
+		container.innerHTML = ''; // Clear existing content
+		container.className = 'table-container';
+		container.classList.add(`${tableId}-container`);
+
+		// Create wrapper for both tables
+		const wrapper = document.createElement('div');
+		wrapper.className = 'table-wrapper';
+		container.appendChild(wrapper);
+
+		// Create frozen columns table
+		const frozenTable = document.createElement('table');
+		frozenTable.className = 'data-table frozen-table';
+		wrapper.appendChild(frozenTable);
+
+		// Create scrollable columns table
+		const scrollableTable = document.createElement('table');
+		scrollableTable.className = 'data-table scrollable-table';
+		wrapper.appendChild(scrollableTable);
+
 		// Create header rows
-		createTableHeader(frozenTable, ['#', '', 'Status', 'public_Name', 'lvs.hostname'], true);
-		createTableHeader(scrollableTable, jamesMode ? jamesColumns.slice(2) : requiredColumns.slice(2), false);
-	
-	
-	    // Create table bodies
-	    const frozenBody = frozenTable.createTBody();
-	    const scrollableBody = scrollableTable.createTBody();
-	
-	    let tableErrorCount = 0;
-	
-	    // Create data rows
-	    data.forEach((row, rowIndex) => {
-	        // Determine if this row has errors
-	        const isIPValid = isValidIP(row['lvs.hostname']);
-	        const isNameValid = !isInvalidHostname(row['public_Name']);
-	        const errorReasons = [];
-	
-	        if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
-	            errorReasons.push('Invalid IP Address');
-	        }
-	        if (!isNameValid) {
-	            errorReasons.push('Invalid Hostname');
-	        }
-	
-	        row.isError = errorReasons.length > 0;
-	        row.errorReasons = errorReasons;
-	
-	        if (row.isError) {
-	            tableErrorCount++;
-	        }
-	
-	        createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId);
-	    });
-	
-	    // Synchronize scroll
-	    synchronizeScroll(frozenBody, scrollableBody);
-	
-	    // Update error section
-	    updateErrorSection(tableId, data, tableErrorCount);
-	
-	    // Update the heading
-	    //updateTableHeading(tableId, data, tableErrorCount);
-	
-	    const action = tableId.replace('Table', '');
-	    updateDownloadButton(action);
-	
-	    logDebug(`Finished displayTable function for ${tableId}. Error count: ${tableErrorCount}`);
+		createTableHeader(frozenTable, ['#', '', 'Status', 'public_Name', 'lvs.hostname'], true, tableId);
+		createTableHeader(scrollableTable, 
+			tableId === 'removeTable' ? [] : (jamesMode ? jamesColumns.slice(2) : requiredColumns.slice(2)), 
+			false, 
+			tableId
+		);
+
+		// Create table bodies
+		const frozenBody = frozenTable.createTBody();
+		const scrollableBody = scrollableTable.createTBody();
+
+		let tableErrorCount = 0;
+
+		// Create data rows
+		data.forEach((row, rowIndex) => {
+			// Determine if this row has errors
+			const isIPValid = isValidIP(row['lvs.hostname']);
+			const isNameValid = !isInvalidHostname(row['public_Name']);
+			const errorReasons = [];
+
+			if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
+				errorReasons.push('Invalid IP Address');
+			}
+			if (!isNameValid) {
+				errorReasons.push('Invalid Hostname');
+			}
+
+			row.isError = errorReasons.length > 0;
+			row.errorReasons = errorReasons;
+
+			if (row.isError) {
+				tableErrorCount++;
+			}
+
+			createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId);
+		});
+
+		// Synchronize scroll
+		synchronizeScroll(frozenBody, scrollableBody);
+
+		// Update error section
+		updateErrorSection(tableId, data, tableErrorCount);
+
+		const action = tableId.replace('Table', '');
+		updateDownloadButton(action);
+
+		logDebug(`Finished displayTable function for ${tableId}. Error count: ${tableErrorCount}`);
 	}
 	
-	function createTableHeader(table, headers, isLeftTable) {
-	    const thead = table.createTHead();
-	    const headerRow = thead.insertRow();
-	    headerRow.className = isLeftTable ? 'sticky-header-l' : 'sticky-header-r';
-	    headers.forEach(header => {
-	        const th = document.createElement('th');
-	        th.textContent = header;
-	        headerRow.appendChild(th);
-	    });
+	function createTableHeader(table, headers, isLeftTable, tableId) {
+		const thead = table.createTHead();
+		const headerRow = thead.insertRow();
+		headerRow.className = isLeftTable ? 'sticky-header-l' : 'sticky-header-r';
+
+		if (tableId === 'removeTable') {
+			// For remove table, only show specific headers
+			const removeHeaders = isLeftTable ? 
+				['#', '', 'Status', 'public_Name', 'lvs.hostname'] : 
+				['lvs.assetfunction', 'lvs.assetlocation'];
+			
+			removeHeaders.forEach(header => {
+				const th = document.createElement('th');
+				th.textContent = header;
+				headerRow.appendChild(th);
+			});
+		} else {
+			// For other tables, show all headers
+			headers.forEach(header => {
+				const th = document.createElement('th');
+				th.textContent = header;
+				headerRow.appendChild(th);
+			});
+		}
 	}
+
 
 	function createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId) {
 		const frozenRow = frozenBody.insertRow();
@@ -679,20 +754,32 @@
 
 		// Add cells to frozen row
 		addLineNumberCell(frozenRow, rowIndex);
-		addTrashIconCell(frozenRow, row, rowIndex, tableId);
-		addStatusCell(frozenRow, row);
-		addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId);
-		addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
+		
+		if (tableId === 'removeTable') {
+			addCheckboxCell(frozenRow, rowIndex, tableId);
+			addStatusCell(frozenRow, row, true);
+			addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId, true);
+			addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
+			
+			// Add new columns to scrollable part for Remove table
+			addEditableCell(scrollableRow, row, 'lvs.assetfunction', rowIndex, 5, tableId);
+			addEditableCell(scrollableRow, row, 'lvs.assetlocation', rowIndex, 6, tableId);
+		} else {
+			addTrashIconCell(frozenRow, row, rowIndex, tableId);
+			addStatusCell(frozenRow, row, false);
+			addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId, true);
+			addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
 
-		// Modify the cells added to scrollable row
-		const columnsToAdd = jamesMode ? jamesColumns.slice(2) : requiredColumns.slice(2);
-		columnsToAdd.forEach((key, colIndex) => {
-			if (tableId === 'addTable' && key in dropdownOptions) {
-				createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
-			} else {
-				addEditableCell(scrollableRow, row, key, rowIndex, colIndex + 5, tableId);
-			}
-		});
+			// Add cells to scrollable row for non-remove tables
+			const columnsToAdd = jamesMode ? jamesColumns.slice(2) : requiredColumns.slice(2);
+			columnsToAdd.forEach((key, colIndex) => {
+				if (tableId === 'addTable' && key in dropdownOptions) {
+					createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
+				} else {
+					addEditableCell(scrollableRow, row, key, rowIndex, colIndex + 5, tableId);
+				}
+			});
+		}
 	}
 
 	function synchronizeScroll(frozenBody, scrollableBody) {
@@ -767,41 +854,85 @@
 		}
 	}
 
-	function addStatusCell(row, dataRow) {
+	function addStatusCell(row, dataRow, isRemoveTable) {
 		const cell = row.insertCell();
+		cell.className = 'status-column';
 		const statusBadge = document.createElement('span');
-		statusBadge.className = `status-badge ${dataRow.isError ? 'status-error' : 'status-valid'}`;
-		statusBadge.textContent = dataRow.isError ? 'Error' : 'Valid';
+		statusBadge.className = 'status-badge';
+		
+		if (isRemoveTable) {
+			const rowIndex = parseInt(row.id.split('-')[3]);
+			const isRemoved = removeCheckedRows.has(rowIndex);
+			statusBadge.textContent = isRemoved ? 'Removed' : 'Valid';
+			statusBadge.classList.add(isRemoved ? 'status-removed' : 'status-valid');
+		} else {
+			statusBadge.textContent = dataRow.isError ? 'Error' : 'Valid';
+			statusBadge.classList.add(dataRow.isError ? 'status-error' : 'status-valid');
+		}
+		
 		cell.appendChild(statusBadge);
 	}
 
-	function addEditableCell(rowElement, dataRow, key, rowIndex, colIndex, tableId) {
-	    const cell = rowElement.insertCell();
-	    cell.contentEditable = true;
-	    cell.className = 'editable';
-	
-	    if (key === 'public_Name') {
-	        cell.classList.add('public-name');
-	        if (isInvalidHostname(dataRow[key])) {
-	            cell.classList.add('invalid-name');
-	        }
-	        cell.textContent = dataRow[key]; // Ensure the public_Name is displayed
-	    } else if (key === 'lvs.hostname') {
-	        const cleanedIP = dataRow[key].trim().replace(/[^\d.]/g, '');
-	        if (!isValidIP(cleanedIP) && !(allow_blank_ip && cleanedIP === '')) {
-	            cell.classList.add('invalid-ip');
-	        }
-	        cell.textContent = cleanedIP;
-	        dataRow[key] = cleanedIP; // Update the data array with the cleaned IP
-	    } else {
-	        cell.textContent = dataRow[key];
-	    }
-	
-	    cell.dataset.row = rowIndex;
-	    cell.dataset.col = colIndex;
-	    cell.dataset.key = key;
-	    cell.addEventListener('keydown', handleCellKeyDown);
-	    cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key));
+	function addEditableCell(rowElement, dataRow, key, rowIndex, colIndex, tableId, isPublicName = false) {
+		const cell = rowElement.insertCell();
+		cell.contentEditable = true;
+		cell.className = `editable ${key.replace('.', '-')}`;
+
+		if (key === 'public_Name') {
+			cell.classList.add('public-name');
+			if (isInvalidHostname(dataRow[key])) {
+				cell.classList.add('invalid-name');
+			}
+			const fullName = dataRow[key];
+			cell.textContent = fullName;
+			cell.title = fullName; // Add title attribute for hover effect
+			
+			// Remove inline styles
+			cell.style.minWidth = '';
+			cell.style.maxWidth = '';
+			cell.style.whiteSpace = '';
+			cell.style.overflow = '';
+			cell.style.textOverflow = '';
+		} else if (key === 'lvs.hostname') {
+			cell.classList.add('lvs-hostname');
+			const cleanedIP = dataRow[key].trim().replace(/[^\d.]/g, '');
+			if (!isValidIP(cleanedIP) && !(allow_blank_ip && cleanedIP === '')) {
+				cell.classList.add('invalid-ip');
+			}
+			cell.textContent = cleanedIP;
+			dataRow[key] = cleanedIP; // Update the data array with the cleaned IP
+		} else {
+			cell.textContent = dataRow[key];
+		}
+
+		cell.dataset.row = rowIndex;
+		cell.dataset.col = colIndex;
+		cell.dataset.key = key;
+		cell.addEventListener('keydown', handleCellKeyDown);
+		cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key));
+	}
+
+	function addCheckboxCell(row, rowIndex, tableId) {
+		const cell = row.insertCell();
+		cell.className = 'checkbox-column';
+		const checkbox = document.createElement('input');
+		checkbox.type = 'checkbox';
+		checkbox.checked = removeCheckedRows.has(rowIndex);
+		checkbox.addEventListener('change', () => {
+			if (checkbox.checked) {
+				removeCheckedRows.add(rowIndex);
+			} else {
+				removeCheckedRows.delete(rowIndex);
+			}
+			recordChange('checkbox', tableId, rowIndex, 'checked', !checkbox.checked, checkbox.checked);
+			
+			// Update the status cell
+			const statusCell = row.cells[2]; // Assuming status cell is the third cell
+			const statusBadge = statusCell.querySelector('.status-badge');
+			statusBadge.textContent = checkbox.checked ? 'Removed' : 'Valid';
+			statusBadge.className = `status-badge ${checkbox.checked ? 'status-removed' : 'status-valid'}`;
+		});
+		cell.appendChild(checkbox);
 	}
 
 	function handleCellBlur(event, tableId, rowIndex, key) {
@@ -953,7 +1084,7 @@
 		logDebug('Undo function called');
 		if (undoStack.length > 0) {
 			const lastChange = undoStack.pop();
-			redoStack.push(lastChange); // Push the undone action to the redo stack
+			redoStack.push(lastChange);
 			logDebug('Undoing last change:', lastChange);
 			let data;
 			if (lastChange.tableId === 'addTable') {
@@ -970,6 +1101,13 @@
 			} else if (lastChange.type === 'edit') {
 				logDebug('Undoing edit operation');
 				data[lastChange.rowIndex][lastChange.columnKey] = lastChange.oldValue;
+			} else if (lastChange.type === 'checkbox') {
+				logDebug('Undoing checkbox operation');
+				if (lastChange.oldValue) {
+					removeCheckedRows.add(lastChange.rowIndex);
+				} else {
+					removeCheckedRows.delete(lastChange.rowIndex);
+				}
 			}
 
 			displayTable(lastChange.tableId, data);
@@ -983,7 +1121,7 @@
 		logDebug('Redo function called');
 		if (redoStack.length > 0) {
 			const lastUndoneChange = redoStack.pop();
-			undoStack.push(lastUndoneChange); // Push the redone action back to the undo stack
+			undoStack.push(lastUndoneChange);
 			logDebug('Redoing last undone change:', lastUndoneChange);
 			let data;
 			if (lastUndoneChange.tableId === 'addTable') {
@@ -1000,6 +1138,13 @@
 			} else if (lastUndoneChange.type === 'edit') {
 				logDebug('Redoing edit operation');
 				data[lastUndoneChange.rowIndex][lastUndoneChange.columnKey] = lastUndoneChange.newValue;
+			} else if (lastUndoneChange.type === 'checkbox') {
+				logDebug('Redoing checkbox operation');
+				if (lastUndoneChange.newValue) {
+					removeCheckedRows.add(lastUndoneChange.rowIndex);
+				} else {
+					removeCheckedRows.delete(lastUndoneChange.rowIndex);
+				}
 			}
 
 			displayTable(lastUndoneChange.tableId, data);
@@ -1344,10 +1489,12 @@
 			return;
 		}
 
+		let columnsToExport = action === 'remove' ? ['public_Name', 'lvs.hostname'] : requiredColumns;
+
 		const csv = '\ufeff' + [ // Add BOM for UTF-8
-			requiredColumns.join(','), // Add column headers
+			columnsToExport.join(','), // Add column headers
 			...data.map(row => 
-				requiredColumns.map(key => {
+				columnsToExport.map(key => {
 					let value = row[key];
 					// If the field contains a comma or special characters, wrap it in double quotes
 					if (typeof value === 'string' && (value.includes(',') || /[^\u0000-\u007f]/.test(value))) {
