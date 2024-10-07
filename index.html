@@ -36,6 +36,42 @@
 		.frozen-table td, .scrollable-table td { height: 100%; }
 		.scrollable-table th:first-child, .scrollable-table td:first-child { padding-left: 8px; }
 
+		.lvs-hostname-header,
+		.public-name-header {
+			cursor: pointer;
+			user-select: none;
+			transition: max-width 0.3s ease;
+		}
+
+		.lvs-hostname-header .toggle-btn,
+		.public-name-header .toggle-btn {
+			font-size: 0.8em;
+			color: #666;
+		}
+
+		.lvs-hostname,
+		.public-name {
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			transition: max-width 0.3s ease;
+		}
+
+		.lvs-hostname.collapsed,
+		.public-name.collapsed {
+			max-width: 225px; /* Adjust as needed for collapsed state */
+		}
+
+		.lvs-hostname-header.collapsed,
+		.public-name-header.collapsed {
+			max-width: 225px; /* Match the collapsed cell width */
+		}
+
+		.lvs-hostname-header.collapsed .toggle-btn,
+		.public-name-header.collapsed .toggle-btn {
+			float: right;
+		}
+
 		/* Header Styles */
 		.sticky-header-l th, .sticky-header-r th {
 			position: sticky; top: 0; background-color: #f8f8f8;
@@ -193,10 +229,11 @@
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.5.3"></div>
+    <div id="versionInfo" data-version="1.5.4"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
+            <li>v1.5.4:<br />- Added dynamically Expandable/Collapsible public_Name and lvs.hostname columns!<br /> (for times where the data is a long chain and pushes the rest of the columns off the screen)</li><br />
             <li>v1.5.3:<br />- Made some tweaks to cell sizes, increased public_Name to accomodate larger hostnames (while also providing a hover function for those that are super long)<br />- Removed unneccesary columns from the Remove table<br />- Added a checkbox function to the Remove Table to keep track of removals as you work through them.</li><br />
             <li>v1.5.2:<br />- James mode!</li><br />
             <li>v1.5.1:<br />- Fixed some UTF-8 related issues with certain characters.<br />- Fixed bug with data being cleared from the 'dropdown' cells where you manually entered data.</li><br />
@@ -608,33 +645,25 @@
   	}
   	*/
 
-  	function isValidIP(ip) {
-  		const cleanedIP = ip.trim().toLowerCase();
+	function isValidIP(ip) {
+	  // If allowing blank IPs and the input is blank or a placeholder, consider it valid
+	  if (allow_blank_ip && (!ip.trim() || ['n/a', 'none', 'not applicable'].includes(ip.toLowerCase()))) {
+		return true;
+	  }
 
-  		// Handle special cases for "n/a", "none", or other placeholders
-  		const placeholders = ['n/a', 'none', 'not applicable', 'n/a'];
+	  // Split the input by commas to handle multiple IPs
+	  const ips = ip.split(',').map(i => i.trim());
 
-  		if (allow_blank_ip && (cleanedIP === '' || placeholders.includes(cleanedIP))) {
-  			return true; // Consider these as valid if blank IPs are allowed
-  		}
-
-  		if (!allow_blank_ip && (cleanedIP === '' || placeholders.includes(cleanedIP))) {
-  			return false; // Blank IPs or placeholders are invalid if not allowed
-  		}
-
-  		// Continue with standard IP validation
-  		const octets = cleanedIP.split('.');
-  		if (octets.length !== 4) return false;
-
-  		for (let i = 0; i < octets.length; i++) {
-  			const octet = octets[i];
-  			if (!/^\d{1,3}$/.test(octet)) return false;
-  			const num = parseInt(octet, 10);
-  			if (num < 0 || num > 255 || (octet.length > 1 && octet[0] === '0')) return false;
-  		}
-
-  		return true;
-  	}
+	  // Check each IP individually
+	  return ips.every(singleIP => {
+		const octets = singleIP.split('.');
+		if (octets.length !== 4) return false;
+		return octets.every(octet => {
+		  const num = parseInt(octet, 10);
+		  return !isNaN(num) && num >= 0 && num <= 255;
+		});
+	  });
+	}
 
   	function isInvalidHostname(hostname) {
   		const invalidTerms = ['n/a', 'none', 'not applicable', 'unknown', 'tbd', 'to be determined', 'null', 'undefined'];
@@ -718,25 +747,24 @@
 		const headerRow = thead.insertRow();
 		headerRow.className = isLeftTable ? 'sticky-header-l' : 'sticky-header-r';
 
-		if (tableId === 'removeTable') {
-			// For remove table, only show specific headers
-			const removeHeaders = isLeftTable ? 
-				['#', '', 'Status', 'public_Name', 'lvs.hostname'] : 
-				['lvs.assetfunction', 'lvs.assetlocation'];
-			
-			removeHeaders.forEach(header => {
-				const th = document.createElement('th');
+		headers.forEach(header => {
+			const th = document.createElement('th');
+			if (header === 'lvs.hostname' || header === 'public_Name') {
+				const columnClass = header === 'lvs.hostname' ? 'lvs-hostname' : 'public-name';
+				th.className = `${columnClass}-header`;
+				th.innerHTML = `${header} <span class="toggle-btn">← (Collapse)</span>`;
+				th.addEventListener('click', () => toggleColumn(columnClass));
+			} else {
 				th.textContent = header;
-				headerRow.appendChild(th);
-			});
-		} else {
-			// For other tables, show all headers
-			headers.forEach(header => {
-				const th = document.createElement('th');
-				th.textContent = header;
-				headerRow.appendChild(th);
-			});
-		}
+			}
+			headerRow.appendChild(th);
+		});
+
+		// Initialize columns in expanded state
+		setTimeout(() => {
+			toggleColumn('lvs-hostname');
+			toggleColumn('public-name');
+		}, 0);
 	}
 
 
@@ -874,42 +902,34 @@
 	}
 
 	function addEditableCell(rowElement, dataRow, key, rowIndex, colIndex, tableId, isPublicName = false) {
-		const cell = rowElement.insertCell();
-		cell.contentEditable = true;
-		cell.className = `editable ${key.replace('.', '-')}`;
+	  const cell = rowElement.insertCell();
+	  cell.contentEditable = true;
+	  cell.className = `editable ${key.replace('.', '-')}`;
 
 		if (key === 'public_Name') {
 			cell.classList.add('public-name');
 			if (isInvalidHostname(dataRow[key])) {
 				cell.classList.add('invalid-name');
 			}
-			const fullName = dataRow[key];
-			cell.textContent = fullName;
-			cell.title = fullName; // Add title attribute for hover effect
-			
-			// Remove inline styles
-			cell.style.minWidth = '';
-			cell.style.maxWidth = '';
-			cell.style.whiteSpace = '';
-			cell.style.overflow = '';
-			cell.style.textOverflow = '';
+			cell.textContent = dataRow[key];
+			cell.title = dataRow[key]; // Add title attribute for hover effect
 		} else if (key === 'lvs.hostname') {
 			cell.classList.add('lvs-hostname');
-			const cleanedIP = dataRow[key].trim().replace(/[^\d.]/g, '');
-			if (!isValidIP(cleanedIP) && !(allow_blank_ip && cleanedIP === '')) {
+			if (!isValidIP(dataRow[key])) {
 				cell.classList.add('invalid-ip');
 			}
-			cell.textContent = cleanedIP;
-			dataRow[key] = cleanedIP; // Update the data array with the cleaned IP
+			cell.textContent = dataRow[key];
+			cell.title = dataRow[key]; // Add tooltip
 		} else {
 			cell.textContent = dataRow[key];
 		}
 
-		cell.dataset.row = rowIndex;
-		cell.dataset.col = colIndex;
-		cell.dataset.key = key;
-		cell.addEventListener('keydown', handleCellKeyDown);
-		cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key));
+
+	  cell.dataset.row = rowIndex;
+	  cell.dataset.col = colIndex;
+	  cell.dataset.key = key;
+	  cell.addEventListener('keydown', handleCellKeyDown);
+	  cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key));
 	}
 
 	function addCheckboxCell(row, rowIndex, tableId) {
@@ -936,25 +956,25 @@
 	}
 
 	function handleCellBlur(event, tableId, rowIndex, key) {
-		const newValue = event.target.textContent;
-		let data;
-		if (tableId === 'addTable') {
-			data = addData;
-		} else if (tableId === 'removeTable') {
-			data = removeData;
-		} else if (tableId === 'changeTable') {
-			data = changeData;
-		}
+	  const newValue = event.target.textContent;
+	  let data;
+	  if (tableId === 'addTable') {
+		data = addData;
+	  } else if (tableId === 'removeTable') {
+		data = removeData;
+	  } else if (tableId === 'changeTable') {
+		data = changeData;
+	  }
 
-		if (newValue !== data[rowIndex][key]) {
-			updateData(tableId, rowIndex, key, newValue);
-		}
-		
-		if (key === 'lvs.hostname') {
-			event.target.classList.toggle('invalid-ip', !isValidIP(newValue));
-		} else if (key === 'public_Name') {
-			event.target.classList.toggle('invalid-name', isInvalidHostname(newValue));
-		}
+	  if (newValue !== data[rowIndex][key]) {
+		updateData(tableId, rowIndex, key, newValue);
+	  }
+	  
+	  if (key === 'lvs.hostname') {
+		event.target.classList.toggle('invalid-ip', !isValidIP(newValue));
+	  } else if (key === 'public_Name') {
+		event.target.classList.toggle('invalid-name', isInvalidHostname(newValue));
+	  }
 	}
 
 
@@ -1407,6 +1427,49 @@
 		return dropdown;
 	
   	}
+
+	function toggleColumn(columnClass) {
+		const headers = document.querySelectorAll(`.${columnClass}-header`);
+		const cells = document.querySelectorAll(`.${columnClass}`);
+		const isCollapsed = headers[0].classList.contains('collapsed');
+
+		if (isCollapsed) {
+			// Expanding
+			let maxWidth = 0;
+			cells.forEach(cell => {
+				const tempSpan = document.createElement('span');
+				tempSpan.style.visibility = 'hidden';
+				tempSpan.style.whiteSpace = 'nowrap';
+				tempSpan.textContent = cell.textContent;
+				document.body.appendChild(tempSpan);
+				maxWidth = Math.max(maxWidth, tempSpan.offsetWidth);
+				document.body.removeChild(tempSpan);
+			});
+
+			cells.forEach(cell => {
+				cell.style.maxWidth = `${maxWidth + 20}px`; // Add some padding
+				cell.classList.remove('collapsed');
+			});
+
+			headers.forEach(header => {
+				header.classList.remove('collapsed');
+				header.innerHTML = `${columnClass === 'lvs-hostname' ? 'lvs.hostname' : 'public_Name'} &nbsp;&nbsp;&nbsp; <span class="toggle-btn"> ← (Collapse)</span>`;
+				header.style.maxWidth = `${maxWidth + 20}px`;
+			});
+		} else {
+			// Collapsing
+			cells.forEach(cell => {
+				cell.style.maxWidth = '';
+				cell.classList.add('collapsed');
+			});
+
+			headers.forEach(header => {
+				header.classList.add('collapsed');
+				header.innerHTML = `${columnClass === 'lvs-hostname' ? 'lvs.hostname' : 'public_Name'} <span class="toggle-btn">(Expand) →</span>`;
+				header.style.maxWidth = '';
+			});
+		}
+	}
 
   	function handleCellKeyDown(event) {
   		if (event.key === 'Enter') {
