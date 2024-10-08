@@ -229,10 +229,11 @@
 </head>
 <body>
     <h1>MDAC Formatter <span id="versionDisplay"></span></h1>
-    <div id="versionInfo" data-version="1.5.4"></div>
+    <div id="versionInfo" data-version="1.5.5"></div>
     <div id="changelogTooltip">
         <h3>Changelog:</h3>
         <ul>
+            <li>v1.5.5:<br />- Removed validation for lvs.hostname column under Changes Table<br />- Removed lvs.hostname column from being saved to csv from Changes table</li><br />
             <li>v1.5.4:<br />- Added dynamically Expandable/Collapsible public_Name and lvs.hostname columns!<br /> (for times where the data is a long chain and pushes the rest of the columns off the screen)</li><br />
             <li>v1.5.3:<br />- Made some tweaks to cell sizes, increased public_Name to accomodate larger hostnames (while also providing a hover function for those that are super long)<br />- Removed unneccesary columns from the Remove table<br />- Added a checkbox function to the Remove Table to keep track of removals as you work through them.</li><br />
             <li>v1.5.2:<br />- James mode!</li><br />
@@ -316,6 +317,18 @@
 	
 	let allow_blank_ip = true;
 	
+	const defaultColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igsdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
+
+	const jamesColumns = ['public_Name', 'lvs.hostname', 'lvs.allocationcentre', 'lvs.assetfunction', 'lvs.assetlocation', 'lvs.blockrules', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.dtcmodel', 'lvs.igsbackup', 'lvs.igsdeviceclass', 'lvs.igsteam', 'lvs.managedassetexport', 'lvs.managedservicelevel', 'lvs.nocdeviceclass', 'lvs.ostype', 'lvs.patchgroup', 'lvs.patching', 'lvs.pcipurpose', 'lvs.pcirole', 'lvs.profitandlosscode', 'lvs.projectcode_from', 'lvs.projectcode_to', 'lvs.supporthours', 'lvs.supportlevel', 'lvs.crmname', 'lvs.crmnumber', 'lvs.sitename'];
+
+	let requiredColumns = defaultColumns;
+
+	const csvExportConfig = {
+		add: requiredColumns, // Include everything under defaultColumns for Adds.
+		remove: ['public_Name', 'lvs.hostname'], // ONLY include public_Name and lvs.hostname in Removals
+		change: requiredColumns.filter(col => !['lvs.hostname', 'lvs.somethingelse', 'lvs.anothercolumn'].includes(col)) // Do not include lvs.hostname, lvs.somethingelse, lvs.anothercolumn in exported csv
+	};
+
 	let undoStack = [];
 	let redoStack = [];
 	let maxUndoStack = 100; // Maximum number of undos
@@ -334,12 +347,6 @@
 	let jamesMode = false;
 	
 	let hasUnsavedChanges = false;
-	
-	let tableEdited = {
-		add: false,
-		remove: false,
-		change: false
-	};
 
 	let csvDownloaded = {
   		add: false,
@@ -347,11 +354,11 @@
   		change: false
 	};
 
-	const defaultColumns = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.supporthours', 'lvs.assetlocation', 'lvs.managedservicelevel', 'lvs.supportlevel', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.igsdeviceclass', 'lvs.igsservicetower', 'lvs.ostype', 'lvs.igsbackup', 'lvs.patching', 'lvs.pcirole', 'lvs.pcipurpose', 'lvs.dtcmodel', 'lvs.nocdeviceclass', 'lvs.patchgroup'];
-
-	const jamesColumns = ['public_Name', 'lvs.hostname', 'lvs.allocationcentre', 'lvs.assetfunction', 'lvs.assetlocation', 'lvs.blockrules', 'lvs.confidentialityclass', 'lvs.deviceplatform', 'lvs.dtcmodel', 'lvs.igsbackup', 'lvs.igsdeviceclass', 'lvs.igsteam', 'lvs.managedassetexport', 'lvs.managedservicelevel', 'lvs.nocdeviceclass', 'lvs.ostype', 'lvs.patchgroup', 'lvs.patching', 'lvs.pcipurpose', 'lvs.pcirole', 'lvs.profitandlosscode', 'lvs.projectcode_from', 'lvs.projectcode_to', 'lvs.supporthours', 'lvs.supportlevel', 'lvs.crmname', 'lvs.crmnumber', 'lvs.sitename'];
-
-	let requiredColumns = defaultColumns;
+	let tableEdited = {
+		add: false,
+		remove: false,
+		change: false
+	};
 
   	const dropdownOptions = {
   		'lvs.igsservicetower': ['Citrix', 'Cloud', 'Database', 'Internal Systems', 'Linux', 'Messaging', 'Network', 'Network Voice', 'NOC', 'Server', 'Storage & Backup', 'Virtualization', 'Windows'],
@@ -671,7 +678,7 @@
   	}
 
 	function displayTable(tableId, data) {
-		logDebug(`Starting displayTable function for ${tableId}`);
+		console.log(`Starting displayTable function for ${tableId}`);
 		const container = document.getElementById(tableId);
 		container.innerHTML = ''; // Clear existing content
 		container.className = 'table-container';
@@ -692,10 +699,19 @@
 		scrollableTable.className = 'data-table scrollable-table';
 		wrapper.appendChild(scrollableTable);
 
+		const action = tableId.replace('Table', '');
+		let columnsToDisplay;
+
+		if (action === 'remove') {
+			columnsToDisplay = ['public_Name', 'lvs.hostname', 'lvs.assetfunction', 'lvs.assetlocation'];
+		} else {
+			columnsToDisplay = jamesMode ? jamesColumns : requiredColumns;
+		}
+
 		// Create header rows
 		createTableHeader(frozenTable, ['#', '', 'Status', 'public_Name', 'lvs.hostname'], true, tableId);
 		createTableHeader(scrollableTable, 
-			tableId === 'removeTable' ? [] : (jamesMode ? jamesColumns.slice(2) : requiredColumns.slice(2)), 
+			action === 'remove' ? columnsToDisplay.slice(2) : columnsToDisplay.slice(2), 
 			false, 
 			tableId
 		);
@@ -708,26 +724,13 @@
 
 		// Create data rows
 		data.forEach((row, rowIndex) => {
-			// Determine if this row has errors
-			const isIPValid = isValidIP(row['lvs.hostname']);
-			const isNameValid = !isInvalidHostname(row['public_Name']);
-			const errorReasons = [];
-
-			if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
-				errorReasons.push('Invalid IP Address');
-			}
-			if (!isNameValid) {
-				errorReasons.push('Invalid Hostname');
-			}
-
-			row.isError = errorReasons.length > 0;
-			row.errorReasons = errorReasons;
+			validateRow(row, tableId);
 
 			if (row.isError) {
 				tableErrorCount++;
 			}
 
-			createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId);
+			createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId, columnsToDisplay);
 		});
 
 		// Synchronize scroll
@@ -736,16 +739,18 @@
 		// Update error section
 		updateErrorSection(tableId, data, tableErrorCount);
 
-		const action = tableId.replace('Table', '');
 		updateDownloadButton(action);
 
-		logDebug(`Finished displayTable function for ${tableId}. Error count: ${tableErrorCount}`);
+		console.log(`Finished displayTable function for ${tableId}. Error count: ${tableErrorCount}`);
 	}
 	
 	function createTableHeader(table, headers, isLeftTable, tableId) {
 		const thead = table.createTHead();
 		const headerRow = thead.insertRow();
 		headerRow.className = isLeftTable ? 'sticky-header-l' : 'sticky-header-r';
+
+		const action = tableId.replace('Table', '');
+		const columnsToExport = csvExportConfig[action];
 
 		headers.forEach(header => {
 			const th = document.createElement('th');
@@ -757,6 +762,19 @@
 			} else {
 				th.textContent = header;
 			}
+
+			// Add visual indicator for columns that will be exported
+			if (columnsToExport.includes(header) || 
+				(action === 'add' && (header === 'public_Name' || header === 'lvs.hostname')) ||
+				(action === 'remove' && (header === 'public_Name' || header === 'lvs.hostname')) ||
+				(action === 'change' && header === 'public_Name')) {
+				const indicator = document.createElement('span');
+				indicator.textContent = '📤';
+				indicator.title = 'This column will be exported to CSV';
+				indicator.style.marginLeft = '5px';
+				th.appendChild(indicator);
+			}
+
 			headerRow.appendChild(th);
 		});
 
@@ -768,7 +786,9 @@
 	}
 
 
-	function createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId) {
+
+
+	function createTableRow(frozenBody, scrollableBody, row, rowIndex, tableId, columnsToDisplay) {
 		const frozenRow = frozenBody.insertRow();
 		const scrollableRow = scrollableBody.insertRow();
 		
@@ -783,32 +803,32 @@
 		// Add cells to frozen row
 		addLineNumberCell(frozenRow, rowIndex);
 		
-		if (tableId === 'removeTable') {
+		const action = tableId.replace('Table', '');
+		const isRemoveTable = action === 'remove';
+		const isChangeTable = action === 'change';
+
+		if (isRemoveTable) {
 			addCheckboxCell(frozenRow, rowIndex, tableId);
 			addStatusCell(frozenRow, row, true);
-			addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId, true);
-			addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
-			
-			// Add new columns to scrollable part for Remove table
-			addEditableCell(scrollableRow, row, 'lvs.assetfunction', rowIndex, 5, tableId);
-			addEditableCell(scrollableRow, row, 'lvs.assetlocation', rowIndex, 6, tableId);
 		} else {
 			addTrashIconCell(frozenRow, row, rowIndex, tableId);
 			addStatusCell(frozenRow, row, false);
-			addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId, true);
-			addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId);
-
-			// Add cells to scrollable row for non-remove tables
-			const columnsToAdd = jamesMode ? jamesColumns.slice(2) : requiredColumns.slice(2);
-			columnsToAdd.forEach((key, colIndex) => {
-				if (tableId === 'addTable' && key in dropdownOptions) {
-					createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
-				} else {
-					addEditableCell(scrollableRow, row, key, rowIndex, colIndex + 5, tableId);
-				}
-			});
 		}
+
+		// Always add public_Name and lvs.hostname to frozen columns
+		addEditableCell(frozenRow, row, 'public_Name', rowIndex, 3, tableId, true);
+		addEditableCell(frozenRow, row, 'lvs.hostname', rowIndex, 4, tableId, false, isChangeTable);
+
+		// Add cells to scrollable row
+		columnsToDisplay.slice(2).forEach((key, colIndex) => {
+			if (action === 'add' && key in dropdownOptions) {
+				createDropdown(scrollableRow.insertCell(), dropdownOptions[key], row[key], (value) => updateData(tableId, rowIndex, key, value));
+			} else {
+				addEditableCell(scrollableRow, row, key, rowIndex, colIndex + 5, tableId, false, isChangeTable);
+			}
+		});
 	}
+
 
 	function synchronizeScroll(frozenBody, scrollableBody) {
 	    const container = scrollableBody.closest('.table-container');
@@ -901,10 +921,10 @@
 		cell.appendChild(statusBadge);
 	}
 
-	function addEditableCell(rowElement, dataRow, key, rowIndex, colIndex, tableId, isPublicName = false) {
-	  const cell = rowElement.insertCell();
-	  cell.contentEditable = true;
-	  cell.className = `editable ${key.replace('.', '-')}`;
+	function addEditableCell(rowElement, dataRow, key, rowIndex, colIndex, tableId, isPublicName = false, isChangeTable = false) {
+		const cell = rowElement.insertCell();
+		cell.contentEditable = true;
+		cell.className = `editable ${key.replace('.', '-')}`;
 
 		if (key === 'public_Name') {
 			cell.classList.add('public-name');
@@ -915,7 +935,7 @@
 			cell.title = dataRow[key]; // Add title attribute for hover effect
 		} else if (key === 'lvs.hostname') {
 			cell.classList.add('lvs-hostname');
-			if (!isValidIP(dataRow[key])) {
+			if (!isChangeTable && !isValidIP(dataRow[key])) {
 				cell.classList.add('invalid-ip');
 			}
 			cell.textContent = dataRow[key];
@@ -924,13 +944,13 @@
 			cell.textContent = dataRow[key];
 		}
 
-
-	  cell.dataset.row = rowIndex;
-	  cell.dataset.col = colIndex;
-	  cell.dataset.key = key;
-	  cell.addEventListener('keydown', handleCellKeyDown);
-	  cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key));
+		cell.dataset.row = rowIndex;
+		cell.dataset.col = colIndex;
+		cell.dataset.key = key;
+		cell.addEventListener('keydown', handleCellKeyDown);
+		cell.addEventListener('blur', (event) => handleCellBlur(event, tableId, rowIndex, key, isChangeTable));
 	}
+
 
 	function addCheckboxCell(row, rowIndex, tableId) {
 		const cell = row.insertCell();
@@ -955,27 +975,28 @@
 		cell.appendChild(checkbox);
 	}
 
-	function handleCellBlur(event, tableId, rowIndex, key) {
-	  const newValue = event.target.textContent;
-	  let data;
-	  if (tableId === 'addTable') {
-		data = addData;
-	  } else if (tableId === 'removeTable') {
-		data = removeData;
-	  } else if (tableId === 'changeTable') {
-		data = changeData;
-	  }
+	function handleCellBlur(event, tableId, rowIndex, key, isChangeTable) {
+		const newValue = event.target.textContent;
+		let data;
+		if (tableId === 'addTable') {
+			data = addData;
+		} else if (tableId === 'removeTable') {
+			data = removeData;
+		} else if (tableId === 'changeTable') {
+			data = changeData;
+		}
 
-	  if (newValue !== data[rowIndex][key]) {
-		updateData(tableId, rowIndex, key, newValue);
-	  }
-	  
-	  if (key === 'lvs.hostname') {
-		event.target.classList.toggle('invalid-ip', !isValidIP(newValue));
-	  } else if (key === 'public_Name') {
-		event.target.classList.toggle('invalid-name', isInvalidHostname(newValue));
-	  }
+		if (newValue !== data[rowIndex][key]) {
+			updateData(tableId, rowIndex, key, newValue);
+		}
+		
+		if (key === 'lvs.hostname' && !isChangeTable) {
+			event.target.classList.toggle('invalid-ip', !isValidIP(newValue));
+		} else if (key === 'public_Name') {
+			event.target.classList.toggle('invalid-name', isInvalidHostname(newValue));
+		}
 	}
+
 
 
 	function updateErrorSection(tableId, data, errorCount) {
@@ -1062,21 +1083,24 @@
   		displayTable(tableId, data);
   	}
 
-  	function validateRow(row) {
-  		const isIPValid = isValidIP(row['lvs.hostname']);
-  		const isNameValid = !isInvalidHostname(row['public_Name']);
-  		const errorReasons = [];
+	function validateRow(row, tableId) {
+		const action = tableId.replace('Table', '');
+		const isChangeTable = action === 'change';
 
-  		if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
-  			errorReasons.push('Invalid IP Address');
-  		}
-  		if (!isNameValid) {
-  			errorReasons.push('Invalid Hostname');
-  		}
+		const isIPValid = isChangeTable || isValidIP(row['lvs.hostname']);
+		const isNameValid = !isInvalidHostname(row['public_Name']);
+		const errorReasons = [];
 
-  		row.isError = errorReasons.length > 0;
-  		row.errorReasons = errorReasons;
-  	}
+		if (!isIPValid && !(allow_blank_ip && row['lvs.hostname'].trim() === '')) {
+			errorReasons.push('Invalid IP Address');
+		}
+		if (!isNameValid) {
+			errorReasons.push('Invalid Hostname');
+		}
+
+		row.isError = errorReasons.length > 0;
+		row.errorReasons = errorReasons;
+	}
 
   	function updateData(tableId, rowIndex, key, value) {
   		let data;
@@ -1552,13 +1576,13 @@
 			return;
 		}
 
-		let columnsToExport = action === 'remove' ? ['public_Name', 'lvs.hostname'] : requiredColumns;
+		const columnsToExport = csvExportConfig[action];
 
 		const csv = '\ufeff' + [ // Add BOM for UTF-8
 			columnsToExport.join(','), // Add column headers
 			...data.map(row => 
 				columnsToExport.map(key => {
-					let value = row[key];
+					let value = row[key] || ''; // Use empty string if the value is undefined
 					// If the field contains a comma or special characters, wrap it in double quotes
 					if (typeof value === 'string' && (value.includes(',') || /[^\u0000-\u007f]/.test(value))) {
 						value = `"${value.replace(/"/g, '""')}"`; // Escape any existing quotes by doubling them
